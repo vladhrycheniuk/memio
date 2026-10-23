@@ -28,7 +28,7 @@ class KanbanColumn(Base):
     position = Column(Integer, default=0)
 
     user = relationship("User", back_populates="columns")
-    tasks = relationship("Task", back_populates="column")
+    tasks = relationship("Task", back_populates="column", order_by="Task.position")
 
 
 class Task(Base):
