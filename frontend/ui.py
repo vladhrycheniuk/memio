@@ -61,7 +61,7 @@ def main(page: ft.Page):
         page.update()
 
         page.add(
-        ft.Row([ft.Image(src="logo.png", height=48), ft.Text("Memio", size=28, weight="bold")]),
+        ft.Row([ft.Image(src="logo.png", height=56)]),
         board,
     )
     load()
