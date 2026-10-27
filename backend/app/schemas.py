@@ -1,6 +1,6 @@
 from datetime import date
 from typing import Literal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 Priority = Literal["red", "yellow", "green"]
 
@@ -61,6 +61,7 @@ class ColumnOut(BaseModel):
     position: int
     tasks: list[TaskOut] = []
 
+
 class DayUpdate(BaseModel):
     note: str | None = None
     mood_emoji: str | None = None
@@ -72,4 +73,17 @@ class DayOut(BaseModel):
     memory_date: date
     photo_path: str | None = None
     note: str | None = None
-    mood_emoji: str | None = None 
+    mood_emoji: str | None = None
+
+
+class PrintRequest(BaseModel):
+    year: int = Field(ge=1900, le=2200)
+    month: int = Field(ge=1, le=12)
+    format: Literal["png", "pdf"] = "pdf"
+    orientation: Literal["portrait", "landscape"] = "portrait"
+    frame_style: Literal["none", "line", "double", "rounded", "dashed"] = "line"
+    frame_color: str = Field(default="#9CCBEA", pattern=r"^#[0-9a-fA-F]{6}$")
+    frame_width: Literal["thin", "medium", "thick"] = "medium"
+    corners: Literal["round", "square"] = "round"
+    show_logo: bool = True
+    preview: bool = False

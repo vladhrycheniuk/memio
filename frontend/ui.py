@@ -1,10 +1,18 @@
 import calendar
 import datetime
 import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
 import flet as ft
 import requests
 
 API = "http://127.0.0.1:8000"
+
+ROOT = Path(__file__).resolve().parents[1]
+EXPORTS_DIR = ROOT / "exports"
 
 PRIORITIES = {
     "red": ("#F28B82", "Високий"),
@@ -24,6 +32,15 @@ PERIODS = [("day", "День"), ("week", "Тиждень"), ("month", "Міся�
 
 MOODS = ["😊", "😌", "🥰", "😴", "😐", "😔", "😤", "🤒"]
 
+FRAME_COLORS = [
+    ("#9CCBEA", "Блакитний"),
+    ("#F4B6C2", "Рожевий"),
+    ("#A8DCC0", "Мʼятний"),
+    ("#C9B8EC", "Лавандовий"),
+    ("#F7D58B", "Медовий"),
+    ("#5B6B7A", "Графіт"),
+]
+
 COL_BG = "#CFE6F5"
 COL_HOVER = "#B5D9F0"
 CHIP_ON = "#9CCBEA"
@@ -31,6 +48,7 @@ CHIP_OFF = "#FFFFFF"
 
 SB_CLOSED = 34
 SB_OPEN = 210
+SB_GAP = 14
 
 _FitEnum = getattr(ft, "BoxFit", None) or getattr(ft, "ImageFit", None)
 FIT_COVER = _FitEnum.COVER if _FitEnum else "cover"
@@ -38,6 +56,19 @@ FIT_COVER = _FitEnum.COVER if _FitEnum else "cover"
 
 def photo_url(name):
     return f"{API}/uploads/{name}"
+
+
+def open_path(path):
+    """Відкриває файл або папку у системній програмі."""
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(str(path))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except Exception:
+        pass
 
 
 def pick_photo_path():
@@ -80,6 +111,11 @@ def main(page: ft.Page):
     content_area = ft.Column(expand=True, scroll="auto", spacing=15)
     sidebar = ft.Container(width=SB_CLOSED, bgcolor="white", border_radius=16,
                            left=0, top=0, bottom=0)
+    content_wrap = ft.Container(
+        content=content_area,
+        left=0, top=0, right=0, bottom=0,
+        padding=ft.Padding(left=SB_CLOSED + SB_GAP, top=0, right=0, bottom=0),
+    )
 
     # ---------- діалоги (старі й нові версії Flet) ----------
     def open_dialog(dlg):
@@ -643,7 +679,6 @@ def main(page: ft.Page):
             render()
             open_day_dialog(d)
 
-        # підсумок завдань
         day_tasks = [t for t in all_tasks() if t.get("due_date") == iso]
         done = [t for t in day_tasks if t.get("is_done")]
         todo = [t for t in day_tasks if not t.get("is_done")]
@@ -685,6 +720,131 @@ def main(page: ft.Page):
             ],
         )
         open_dialog(dlg)
+
+    # ---------- друк місяця ----------
+    def open_print_dialog():
+        y, m = state["year"], state["month"]
+        st = {
+            "format": "pdf",
+            "orientation": "landscape",
+            "frame_style": "line",
+            "frame_color": FRAME_COLORS[0][0],
+            "frame_width": "medium",
+            "corners": "round",
+            "show_logo": True,
+        }
+
+        rows_col = ft.Column(spacing=6)
+        preview_holder = ft.Container(width=300)
+        status = ft.Text("", size=12, color="#3F8F5B")
+
+        def payload(preview):
+            return {"year": y, "month": m, "preview": preview, **st}
+
+        def centered(control, w, h):
+            return ft.Column([control], width=w, height=h,
+                             alignment=ft.MainAxisAlignment.CENTER,
+                             horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+        def label(text):
+            return ft.Text(text, size=12, color="#5B6B7A")
+
+        def chips_row(key, options):
+            return ft.Row(
+                [chip(text, st[key] == value, lambda e, k=key, v=value: set_opt(k, v))
+                 for value, text in options],
+                spacing=6, wrap=True,
+            )
+
+        def rebuild():
+            swatches = ft.Row(
+                [ft.Container(
+                    content=centered(ft.Text("✓" if st["frame_color"] == c else "",
+                                             size=14, color="white"), 32, 32),
+                    width=32, height=32, bgcolor=c, border_radius=16,
+                    on_click=lambda e, c=c: set_opt("frame_color", c))
+                 for c, _ in FRAME_COLORS],
+                spacing=8, wrap=True,
+            )
+            rows_col.controls = [
+                label("Формат файлу"),
+                chips_row("format", [("pdf", "PDF"), ("png", "PNG")]),
+                label("Орієнтація аркуша A4"),
+                chips_row("orientation", [("landscape", "Альбомна"), ("portrait", "Книжкова")]),
+                label("Рамка"),
+                chips_row("frame_style", [("none", "Без рамки"), ("line", "Лінія"),
+                                          ("double", "Подвійна"), ("rounded", "Заокруглена"),
+                                          ("dashed", "Пунктир")]),
+                label("Колір рамки"),
+                swatches,
+                label("Товщина рамки"),
+                chips_row("frame_width", [("thin", "Тонка"), ("medium", "Середня"),
+                                          ("thick", "Товста")]),
+                label("Клітинки днів"),
+                chips_row("corners", [("round", "Круглі кути"), ("square", "Прямі кути")]),
+                chips_row("show_logo", [(True, "З логотипом"), (False, "Без логотипа")]),
+                ft.Text("Смайлики настрою не друкуються, лише фото й числа.",
+                        size=11, color="#8A98A5"),
+            ]
+
+        def refresh_preview():
+            preview_holder.content = ft.Text("Оновлюю перегляд…", size=12, color="#5B6B7A")
+            page.update()
+            try:
+                r = requests.post(f"{API}/print/month", json=payload(True), timeout=60)
+                if r.ok:
+                    name = r.json()["file"]
+                    preview_holder.content = ft.Image(
+                        src=f"{API}/exports/{name}?v={time.time()}", width=300)
+                else:
+                    preview_holder.content = ft.Text("Не вдалося створити перегляд", size=12)
+            except Exception:
+                preview_holder.content = ft.Text("Не вдалося створити перегляд", size=12)
+            page.update()
+
+        def set_opt(key, value):
+            st[key] = value
+            status.value = ""
+            rebuild()
+            page.update()
+            refresh_preview()
+
+        def create(e):
+            status.value = "Створюю файл…"
+            page.update()
+            try:
+                r = requests.post(f"{API}/print/month", json=payload(False), timeout=180)
+                if r.ok:
+                    info = r.json()
+                    status.value = f"Готово: {info['file']} (папка exports)"
+                    open_path(info["path"])
+                else:
+                    status.value = "Не вдалося створити файл."
+            except Exception:
+                status.value = "Не вдалося створити файл."
+            page.update()
+
+        def open_folder(e):
+            EXPORTS_DIR.mkdir(exist_ok=True)
+            open_path(EXPORTS_DIR)
+
+        rebuild()
+        dlg = ft.AlertDialog(
+            title=ft.Text(f"Друк · {MONTHS[m - 1]} {y}"),
+            content=ft.Column(
+                [ft.Row([ft.Container(rows_col, width=330), preview_holder],
+                        vertical_alignment=ft.CrossAxisAlignment.START, spacing=20),
+                 status],
+                tight=True, width=700, scroll="auto", spacing=10,
+            ),
+            actions=[
+                ft.TextButton("Відкрити папку", on_click=open_folder),
+                ft.TextButton("Закрити", on_click=lambda e: close_dialog(dlg)),
+                ft.TextButton("Створити файл", on_click=create),
+            ],
+        )
+        open_dialog(dlg)
+        refresh_preview()
 
     # ---------- календар (Планування / Підсумки) ----------
     def shift_month(delta):
@@ -780,10 +940,7 @@ def main(page: ft.Page):
                 left=6, bottom=6,
             ))
 
-        if d > datetime.date.today():
-            bg = "#F3F8FC"
-        else:
-            bg = "white"
+        bg = "#F3F8FC" if d > datetime.date.today() else "white"
 
         return ft.Container(
             content=ft.Stack(layers, height=125),
@@ -820,7 +977,8 @@ def main(page: ft.Page):
         style_row = ft.Row([
             chip("Планування", mode == "plan", lambda e: go("calendar")),
             chip("Підсумки", mode == "summary", lambda e: go("myday")),
-        ], spacing=8)
+            ft.TextButton("🖨 Друк місяця", on_click=lambda e: open_print_dialog()),
+        ], spacing=8, wrap=True)
 
         header = ft.Row(
             [
@@ -857,7 +1015,7 @@ def main(page: ft.Page):
         parts += [weekdays, grid]
         return parts
 
-    # ---------- бокове меню (ховається) ----------
+    # ---------- бокове меню (ховається й зсуває вміст) ----------
     def go(view):
         state["view"] = view
         render()
@@ -886,10 +1044,13 @@ def main(page: ft.Page):
 
     def refresh_sidebar(update=True):
         is_open = state["sidebar_open"]
-        sidebar.width = SB_OPEN if is_open else SB_CLOSED
+        width = SB_OPEN if is_open else SB_CLOSED
+        sidebar.width = width
         sidebar.shadow = (ft.BoxShadow(blur_radius=20, color="#33000000", offset=ft.Offset(2, 0))
                           if is_open else None)
         sidebar.content = build_sidebar()
+        # вміст зсувається разом із краєм меню, а не ховається під ним
+        content_wrap.padding = ft.Padding(left=width + SB_GAP, top=0, right=0, bottom=0)
         if update:
             page.update()
 
@@ -914,10 +1075,5 @@ def main(page: ft.Page):
         content_area.controls = [logo] + parts
         page.update()
 
-    content_wrap = ft.Container(
-        content=content_area,
-        left=0, top=0, right=0, bottom=0,
-        padding=ft.Padding(left=48, top=0, right=0, bottom=0),
-    )
     page.add(ft.Stack([content_wrap, sidebar], expand=True))
     load()
