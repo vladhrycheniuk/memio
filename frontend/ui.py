@@ -1,5 +1,6 @@
 import calendar
 import datetime
+import os
 import flet as ft
 import requests
 
@@ -21,10 +22,41 @@ WEEKDAYS_FULL = ["Понеділок", "Вівторок", "Середа", "Че
 PERIODS = [("day", "День"), ("week", "Тиждень"), ("month", "Місяць"),
            ("year", "Рік"), ("all", "Усі")]
 
+MOODS = ["😊", "😌", "🥰", "😴", "😐", "😔", "😤", "🤒"]
+
 COL_BG = "#CFE6F5"
 COL_HOVER = "#B5D9F0"
 CHIP_ON = "#9CCBEA"
 CHIP_OFF = "#FFFFFF"
+
+SB_CLOSED = 34
+SB_OPEN = 210
+
+_FitEnum = getattr(ft, "BoxFit", None) or getattr(ft, "ImageFit", None)
+FIT_COVER = _FitEnum.COVER if _FitEnum else "cover"
+
+
+def photo_url(name):
+    return f"{API}/uploads/{name}"
+
+
+def pick_photo_path():
+    """Системне вікно вибору фото. Повертає (шлях, помилка)."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askopenfilename(
+            title="Обери фото дня",
+            filetypes=[("Зображення", "*.jpg *.jpeg *.png *.webp *.bmp"), ("Усі файли", "*.*")],
+        )
+        root.destroy()
+        return (path or None), None
+    except Exception as ex:
+        return None, str(ex)
 
 
 def main(page: ft.Page):
@@ -34,7 +66,7 @@ def main(page: ft.Page):
 
     today = datetime.date.today()
     state = {
-        "view": "board",
+        "view": "board",          # board / calendar / myday
         "period": "day",
         "anchor": today,
         "topic_filter": None,
@@ -42,10 +74,12 @@ def main(page: ft.Page):
         "month": today.month,
         "columns": [],
         "topics": [],
+        "sidebar_open": False,
     }
 
     content_area = ft.Column(expand=True, scroll="auto", spacing=15)
-    sidebar = ft.Container(width=210, padding=16, bgcolor="white", border_radius=16)
+    sidebar = ft.Container(width=SB_CLOSED, bgcolor="white", border_radius=16,
+                           left=0, top=0, bottom=0)
 
     # ---------- діалоги (старі й нові версії Flet) ----------
     def open_dialog(dlg):
@@ -64,9 +98,15 @@ def main(page: ft.Page):
             page.update()
 
     # ---------- дії з API ----------
+    def all_tasks():
+        return [t for col in state["columns"] for t in col["tasks"]]
+
     def load():
         state["columns"] = requests.get(f"{API}/board").json()
         state["topics"] = requests.get(f"{API}/topics").json()
+        used = {t.get("topic_id") for t in all_tasks()}
+        if state["topic_filter"] is not None and state["topic_filter"] not in used:
+            state["topic_filter"] = None
         render()
 
     def move(task_id, column_id):
@@ -78,8 +118,17 @@ def main(page: ft.Page):
         requests.delete(f"{API}/tasks/{task_id}")
         load()
 
-    def all_tasks():
-        return [t for col in state["columns"] for t in col["tasks"]]
+    # ---------- невиконане з минулих днів ----------
+    def overdue_tasks():
+        t = datetime.date.today().isoformat()
+        return [x for x in all_tasks()
+                if not x.get("is_done") and x.get("due_date") and x["due_date"] < t]
+
+    def carry_over(e):
+        iso = datetime.date.today().isoformat()
+        for x in overdue_tasks():
+            requests.patch(f"{API}/tasks/{x['id']}", json={"due_date": iso})
+        load()
 
     # ---------- період дошки ----------
     def get_range():
@@ -319,18 +368,17 @@ def main(page: ft.Page):
 
         feedback = card_body(task, idx, columns, with_buttons=False)
         feedback.width = 256
-        feedback.scale = 1.06
-        feedback.rotate = 0.04
+        feedback.scale = 1.05
         feedback.shadow = ft.BoxShadow(blur_radius=18, color="#55000000", offset=ft.Offset(0, 6))
 
-        ghost = card_body(task, idx, columns, with_buttons=False)
-        ghost.opacity = 0.35
+        placeholder = card_body(task, idx, columns, with_buttons=False)
+        placeholder.opacity = 0
 
         return ft.Draggable(
             group="task",
             content=body,
             content_feedback=feedback,
-            content_when_dragging=ghost,
+            content_when_dragging=placeholder,
             data=task["id"],
         )
 
@@ -390,7 +438,7 @@ def main(page: ft.Page):
             padding=ft.Padding(left=14, top=8, right=14, bottom=8),
             border_radius=16,
             on_click=on_click,
-    )
+        )
 
     def build_board_view():
         columns = state["columns"]
@@ -412,11 +460,13 @@ def main(page: ft.Page):
             spacing=8, wrap=True,
         )
 
+        used = {t.get("topic_id") for t in all_tasks()}
         topic_chips = [chip("Усі теми", state["topic_filter"] is None,
                             lambda e: set_topic_filter(None))]
         for t in state["topics"]:
-            topic_chips.append(chip(f"#{t['name']}", state["topic_filter"] == t["id"],
-                                    lambda e, tid=t["id"]: set_topic_filter(tid)))
+            if t["id"] in used:
+                topic_chips.append(chip(f"#{t['name']}", state["topic_filter"] == t["id"],
+                                        lambda e, tid=t["id"]: set_topic_filter(tid)))
         topic_row = ft.Row(topic_chips, spacing=8, wrap=True)
 
         total = sum(1 for t in all_tasks() if matches(t))
@@ -424,12 +474,28 @@ def main(page: ft.Page):
                        spacing=15, vertical_alignment=ft.CrossAxisAlignment.START, scroll="auto")
 
         parts = [header, nav, period_row, topic_row]
+
+        overdue = overdue_tasks()
+        if overdue:
+            parts.append(ft.Container(
+                content=ft.Row(
+                    [ft.Text(f"🌿 Невиконаних справ з минулих днів: {len(overdue)}. "
+                             "Нічого страшного, їх можна перенести.",
+                             size=13, color="#4A5A68", expand=True),
+                     ft.TextButton("Перенести на сьогодні", on_click=carry_over)],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                bgcolor="#FFF4D6",
+                padding=ft.Padding(left=14, top=6, right=8, bottom=6),
+                border_radius=12,
+            ))
+
         if total == 0:
             parts.append(ft.Text("Тут поки нічого не заплановано. Спокійний час 🌿", color="#5B6B7A"))
         parts.append(board)
         return parts
 
-    # ---------- календар ----------
+    # ---------- план дня (список завдань дня) ----------
     def open_day_dialog(d):
         iso = d.isoformat()
         day_tasks = [t for t in all_tasks() if t.get("due_date") == iso]
@@ -476,6 +542,151 @@ def main(page: ft.Page):
         )
         open_dialog(dlg)
 
+    # ---------- «Мій день»: підсумок дня ----------
+    def open_summary_dialog(d):
+        iso = d.isoformat()
+        info = requests.get(f"{API}/days/{iso}").json()
+        data = {"mood": info.get("mood_emoji"), "photo": info.get("photo_path")}
+
+        note = ft.TextField(label="Записка дня (до 280 символів)",
+                            value=info.get("note") or "",
+                            multiline=True, min_lines=2, max_lines=4, max_length=280)
+        photo_holder = ft.Container()
+        mood_row = ft.Row(spacing=6, wrap=True)
+        msg = ft.Text("", size=12, color="#B45309")
+
+        def refresh_photo(update=True):
+            if data["photo"]:
+                photo_holder.content = ft.Column([
+                    ft.Image(src=photo_url(data["photo"]), width=380, height=220,
+                             fit=FIT_COVER, border_radius=12),
+                    ft.Row([ft.TextButton("Змінити фото", on_click=pick),
+                            ft.TextButton("Прибрати фото", on_click=remove_photo)], spacing=0),
+                ], spacing=2)
+            else:
+                photo_holder.content = ft.Container(
+                    content=ft.Column(
+                        [ft.Text("📷  Додати фото дня", size=14, color="#4A90C2")],
+                        height=120, width=380,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    bgcolor="#EAF4FB",
+                    border_radius=12,
+                    on_click=pick,
+                )
+            if update:
+                page.update()
+
+        def refresh_mood(update=True):
+            mood_row.controls = [
+                ft.Container(
+                    content=ft.Text(m, size=22),
+                    bgcolor=CHIP_ON if data["mood"] == m else "#F1F1F1",
+                    padding=ft.Padding(left=8, top=4, right=8, bottom=4),
+                    border_radius=14,
+                    on_click=lambda e, m=m: pick_mood(m),
+                )
+                for m in MOODS
+            ]
+            if update:
+                page.update()
+
+        def pick_mood(m):
+            data["mood"] = None if data["mood"] == m else m
+            refresh_mood()
+
+        def pick(e):
+            path, err = pick_photo_path()
+            if err:
+                msg.value = "Не вдалося відкрити вибір файлу."
+                page.update()
+                return
+            if not path:
+                return
+            try:
+                with open(path, "rb") as f:
+                    r = requests.post(f"{API}/days/{iso}/photo",
+                                      files={"file": (os.path.basename(path), f)})
+                if r.ok:
+                    data["photo"] = r.json().get("photo_path")
+                    msg.value = ""
+                else:
+                    msg.value = "Не вдалося завантажити фото. Спробуй інший файл (jpg або png)."
+            except Exception:
+                msg.value = "Не вдалося завантажити фото."
+            refresh_photo(update=False)
+            page.update()
+
+        def remove_photo(e):
+            requests.delete(f"{API}/days/{iso}/photo")
+            data["photo"] = None
+            refresh_photo()
+
+        def persist():
+            requests.put(f"{API}/days/{iso}", json={
+                "note": note.value.strip() or None,
+                "mood_emoji": data["mood"],
+            })
+
+        def finish(e=None):
+            close_dialog(dlg)
+            render()
+
+        def save(e):
+            persist()
+            finish()
+
+        def to_plans(e):
+            persist()
+            close_dialog(dlg)
+            render()
+            open_day_dialog(d)
+
+        # підсумок завдань
+        day_tasks = [t for t in all_tasks() if t.get("due_date") == iso]
+        done = [t for t in day_tasks if t.get("is_done")]
+        todo = [t for t in day_tasks if not t.get("is_done")]
+        if not day_tasks:
+            task_block = [ft.Text("На цей день нічого не було заплановано 🌿",
+                                  size=13, color="#5B6B7A")]
+        else:
+            if len(done) == len(day_tasks):
+                hint = "Усе зроблено, чудовий день 💙"
+            elif not done:
+                hint = "Іноді день це просто відпочинок 🌿"
+            else:
+                hint = "Решту можна спокійно перенести 🌿"
+            task_block = [
+                ft.Text(f"Зроблено {len(done)} з {len(day_tasks)}", size=14, weight="bold"),
+                ft.Text(hint, size=12, color="#5B6B7A"),
+            ]
+            task_block += [ft.Text("✓ " + t["title"], size=13, color="#3F8F5B") for t in done]
+            task_block += [ft.Text("○ " + t["title"], size=13, color="#8A98A5") for t in todo]
+
+        refresh_photo(update=False)
+        refresh_mood(update=False)
+
+        title = f"{d.day} {MONTHS_GEN[d.month - 1]} · {WEEKDAYS_FULL[d.weekday()]}"
+        dlg = ft.AlertDialog(
+            title=ft.Text(title),
+            content=ft.Column(
+                [photo_holder,
+                 ft.Text("Настрій", size=12), mood_row,
+                 note, msg,
+                 ft.Divider(),
+                 *task_block],
+                tight=True, width=400, scroll="auto", spacing=8,
+            ),
+            actions=[
+                ft.TextButton("Плани дня", on_click=to_plans),
+                ft.TextButton("Закрити", on_click=finish),
+                ft.TextButton("Зберегти", on_click=save),
+            ],
+        )
+        open_dialog(dlg)
+
+    # ---------- календар (Планування / Підсумки) ----------
     def shift_month(delta):
         m = state["month"] + delta
         y = state["year"]
@@ -491,7 +702,13 @@ def main(page: ft.Page):
         state["year"], state["month"] = t.year, t.month
         render()
 
-    def build_day_cell(d, day_tasks):
+    def on_day_click(mode, d):
+        if mode == "summary" and d <= datetime.date.today():
+            open_summary_dialog(d)
+        else:
+            open_day_dialog(d)
+
+    def build_plan_cell(d, day_tasks):
         in_month = d.month == state["month"]
         is_today = d == datetime.date.today()
 
@@ -523,21 +740,92 @@ def main(page: ft.Page):
             padding=6,
             bgcolor="white" if in_month else "#F3F8FC",
             border_radius=10,
-            on_click=lambda e, day=d: open_day_dialog(day),
+            on_click=lambda e, day=d: on_day_click("plan", day),
         )
 
-    def build_calendar_view():
+    def build_summary_cell(d, day_tasks, memory):
+        in_month = d.month == state["month"]
+        is_today = d == datetime.date.today()
+        memory = memory or {}
+        photo = memory.get("photo_path")
+        mood = memory.get("mood_emoji")
+
+        layers = []
+        if photo:
+            layers.append(ft.Image(src=photo_url(photo), fit=FIT_COVER, border_radius=10,
+                                   left=0, top=0, right=0, bottom=0))
+
+        num_color = "white" if is_today else "#1F2D3A"
+        layers.append(ft.Container(
+            content=ft.Text(str(d.day), size=12, weight="bold", color=num_color),
+            bgcolor="#4A90C2" if is_today else "#CCFFFFFF",
+            padding=ft.Padding(left=6, top=2, right=6, bottom=2),
+            border_radius=10,
+            left=6, top=6,
+        ))
+
+        if mood:
+            layers.append(ft.Container(
+                content=ft.Text(mood, size=20),
+                right=6, top=4,
+            ))
+
+        if day_tasks:
+            done = sum(1 for t in day_tasks if t.get("is_done"))
+            layers.append(ft.Container(
+                content=ft.Text(f"✓ {done}/{len(day_tasks)}", size=11, color="#33404D"),
+                bgcolor="#CCFFFFFF",
+                padding=ft.Padding(left=6, top=2, right=6, bottom=2),
+                border_radius=8,
+                left=6, bottom=6,
+            ))
+
+        if d > datetime.date.today():
+            bg = "#F3F8FC"
+        else:
+            bg = "white"
+
+        return ft.Container(
+            content=ft.Stack(layers, height=125),
+            expand=1,
+            height=125,
+            bgcolor=bg,
+            border_radius=10,
+            opacity=1 if in_month else 0.45,
+            on_click=lambda e, day=d: on_day_click("summary", day),
+        )
+
+    def build_calendar_view(mode):
         y, m = state["year"], state["month"]
+        weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(y, m)
 
         by_day = {}
         for t in all_tasks():
             if t.get("due_date"):
                 by_day.setdefault(t["due_date"], []).append(t)
 
+        memories = {}
+        if mode == "summary":
+            try:
+                rows = requests.get(f"{API}/days", params={
+                    "start": weeks[0][0].isoformat(),
+                    "end": weeks[-1][-1].isoformat(),
+                }).json()
+                memories = {r["memory_date"]: r for r in rows}
+            except Exception:
+                memories = {}
+
+        title = ft.Text("Календар" if mode == "plan" else "Мій день", size=26, weight="bold")
+
+        style_row = ft.Row([
+            chip("Планування", mode == "plan", lambda e: go("calendar")),
+            chip("Підсумки", mode == "summary", lambda e: go("myday")),
+        ], spacing=8)
+
         header = ft.Row(
             [
                 ft.TextButton("‹", on_click=lambda e: shift_month(-1)),
-                ft.Text(f"{MONTHS[m - 1]} {y}", size=24, weight="bold"),
+                ft.Text(f"{MONTHS[m - 1]} {y}", size=22, weight="bold"),
                 ft.TextButton("›", on_click=lambda e: shift_month(1)),
                 ft.TextButton("Сьогодні", on_click=go_today_calendar),
             ],
@@ -550,21 +838,37 @@ def main(page: ft.Page):
             spacing=6,
         )
 
-        weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(y, m)
-        grid = ft.Column(
-            [ft.Row([build_day_cell(d, by_day.get(d.isoformat(), [])) for d in week], spacing=6)
-             for week in weeks],
-            spacing=6,
-        )
-        return [header, weekdays, grid]
+        rows_ui = []
+        for week in weeks:
+            cells = []
+            for d in week:
+                iso = d.isoformat()
+                if mode == "plan":
+                    cells.append(build_plan_cell(d, by_day.get(iso, [])))
+                else:
+                    cells.append(build_summary_cell(d, by_day.get(iso, []), memories.get(iso)))
+            rows_ui.append(ft.Row(cells, spacing=6))
+        grid = ft.Column(rows_ui, spacing=6)
 
-    # ---------- меню та загальний рендер ----------
+        parts = [title, style_row, header]
+        if mode == "summary":
+            parts.append(ft.Text("Натисни на день, щоб додати фото, настрій і записку 🌸",
+                                 size=12, color="#5B6B7A"))
+        parts += [weekdays, grid]
+        return parts
+
+    # ---------- бокове меню (ховається) ----------
     def go(view):
         state["view"] = view
         render()
 
     def build_sidebar():
-        items = [("board", "🗂  Плани"), ("calendar", "📅  Календар")]
+        if not state["sidebar_open"]:
+            return ft.Container(
+                content=ft.Text("☰", size=18, color="#4A90C2"),
+                padding=ft.Padding(left=8, top=12, right=0, bottom=0),
+            )
+        items = [("board", "🗂  Плани"), ("calendar", "📅  Календар"), ("myday", "🌸  Мій день")]
         nav = []
         for key, label in items:
             active = state["view"] == key
@@ -575,18 +879,45 @@ def main(page: ft.Page):
                 border_radius=12,
                 on_click=lambda e, k=key: go(k),
             ))
-        return ft.Column([ft.Image(src="logo.png", height=36), ft.Container(height=10), *nav], spacing=6)
+        return ft.Container(
+            content=ft.Column([ft.Text("Меню", size=12, color="#8A98A5"), *nav], spacing=6),
+            padding=16,
+        )
 
-    def render():
+    def refresh_sidebar(update=True):
+        is_open = state["sidebar_open"]
+        sidebar.width = SB_OPEN if is_open else SB_CLOSED
+        sidebar.shadow = (ft.BoxShadow(blur_radius=20, color="#33000000", offset=ft.Offset(2, 0))
+                          if is_open else None)
         sidebar.content = build_sidebar()
+        if update:
+            page.update()
+
+    def on_sidebar_hover(e):
+        inside = str(e.data).lower() == "true"
+        if inside != state["sidebar_open"]:
+            state["sidebar_open"] = inside
+            refresh_sidebar()
+
+    sidebar.on_hover = on_sidebar_hover
+
+    # ---------- загальний рендер ----------
+    def render():
+        refresh_sidebar(update=False)
+        logo = ft.Row([ft.Image(src="logo.png", height=44)])
         if state["view"] == "calendar":
-            content_area.controls = build_calendar_view()
+            parts = build_calendar_view("plan")
+        elif state["view"] == "myday":
+            parts = build_calendar_view("summary")
         else:
-            content_area.controls = build_board_view()
+            parts = build_board_view()
+        content_area.controls = [logo] + parts
         page.update()
 
-    page.add(
-        ft.Row([sidebar, content_area], expand=True,
-               vertical_alignment=ft.CrossAxisAlignment.START, spacing=20)
+    content_wrap = ft.Container(
+        content=content_area,
+        left=0, top=0, right=0, bottom=0,
+        padding=ft.Padding(left=48, top=0, right=0, bottom=0),
     )
+    page.add(ft.Stack([content_wrap, sidebar], expand=True))
     load()

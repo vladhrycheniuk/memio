@@ -9,11 +9,26 @@ router = APIRouter(tags=["board"])
 
 USER_ID = 1  # поки один користувач
 DONE_COLUMN_TITLE = "Готово"
+DEFAULT_TOPICS = {"Навчання", "Робота", "Дім", "Особисте"}
+
+
+def cleanup_topics(db: Session):
+    """Видаляє власні теми, у яких не лишилось жодного завдання."""
+    used = {
+        tid for (tid,) in db.query(models.Task.topic_id)
+        .filter(models.Task.topic_id.isnot(None))
+        .distinct()
+    }
+    for topic in db.query(models.Topic).filter_by(user_id=USER_ID).all():
+        if topic.name not in DEFAULT_TOPICS and topic.id not in used:
+            db.delete(topic)
+    db.commit()
 
 
 # ---------- теми ----------
 @router.get("/topics", response_model=list[schemas.TopicOut])
 def get_topics(db: Session = Depends(get_db)):
+    cleanup_topics(db)
     return db.query(models.Topic).filter_by(user_id=USER_ID).order_by(models.Topic.id).all()
 
 
@@ -74,6 +89,7 @@ def update_task(task_id: int, data: schemas.TaskUpdate, db: Session = Depends(ge
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(task, key, value)
     db.commit()
+    cleanup_topics(db)
     db.refresh(task)
     return task
 
@@ -114,4 +130,5 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Завдання не знайдено")
     db.delete(task)
     db.commit()
+    cleanup_topics(db)
     return {"ok": True}

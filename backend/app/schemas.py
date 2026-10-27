@@ -60,3 +60,16 @@ class ColumnOut(BaseModel):
     title: str
     position: int
     tasks: list[TaskOut] = []
+
+class DayUpdate(BaseModel):
+    note: str | None = None
+    mood_emoji: str | None = None
+
+
+class DayOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    memory_date: date
+    photo_path: str | None = None
+    note: str | None = None
+    mood_emoji: str | None = None 

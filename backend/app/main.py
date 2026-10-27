@@ -1,7 +1,8 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from .database import Base, engine, SessionLocal
 from . import models
-from .routers import tasks
+from .routers import tasks, days
 
 Base.metadata.create_all(bind=engine)
 
@@ -27,6 +28,8 @@ seed()
 
 app = FastAPI(title="Memio API")
 app.include_router(tasks.router)
+app.include_router(days.router)
+app.mount("/uploads", StaticFiles(directory=days.UPLOADS_DIR), name="uploads")
 
 
 @app.get("/")
