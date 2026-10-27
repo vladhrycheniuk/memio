@@ -18,8 +18,13 @@ MONTHS_GEN = ["січня", "лютого", "березня", "квітня", "�
 WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"]
 WEEKDAYS_FULL = ["Понеділок", "Вівторок", "Середа", "Четвер", "Пʼятниця", "Субота", "Неділя"]
 
+PERIODS = [("day", "День"), ("week", "Тиждень"), ("month", "Місяць"),
+           ("year", "Рік"), ("all", "Усі")]
+
 COL_BG = "#CFE6F5"
 COL_HOVER = "#B5D9F0"
+CHIP_ON = "#9CCBEA"
+CHIP_OFF = "#FFFFFF"
 
 
 def main(page: ft.Page):
@@ -28,7 +33,16 @@ def main(page: ft.Page):
     page.padding = 20
 
     today = datetime.date.today()
-    state = {"view": "board", "year": today.year, "month": today.month, "columns": []}
+    state = {
+        "view": "board",
+        "period": "day",
+        "anchor": today,
+        "topic_filter": None,
+        "year": today.year,
+        "month": today.month,
+        "columns": [],
+        "topics": [],
+    }
 
     content_area = ft.Column(expand=True, scroll="auto", spacing=15)
     sidebar = ft.Container(width=210, padding=16, bgcolor="white", border_radius=16)
@@ -52,6 +66,7 @@ def main(page: ft.Page):
     # ---------- дії з API ----------
     def load():
         state["columns"] = requests.get(f"{API}/board").json()
+        state["topics"] = requests.get(f"{API}/topics").json()
         render()
 
     def move(task_id, column_id):
@@ -65,6 +80,84 @@ def main(page: ft.Page):
 
     def all_tasks():
         return [t for col in state["columns"] for t in col["tasks"]]
+
+    # ---------- період дошки ----------
+    def get_range():
+        p, a = state["period"], state["anchor"]
+        if p == "day":
+            return a, a
+        if p == "week":
+            start = a - datetime.timedelta(days=a.weekday())
+            return start, start + datetime.timedelta(days=6)
+        if p == "month":
+            last = calendar.monthrange(a.year, a.month)[1]
+            return a.replace(day=1), a.replace(day=last)
+        if p == "year":
+            return datetime.date(a.year, 1, 1), datetime.date(a.year, 12, 31)
+        return None
+
+    def period_title():
+        p, a = state["period"], state["anchor"]
+        rng = get_range()
+        if p == "day":
+            name = f"{WEEKDAYS_FULL[a.weekday()]}, {a.day} {MONTHS_GEN[a.month - 1]}"
+            return ("Сьогодні · " + name) if a == datetime.date.today() else name
+        if p == "week":
+            s, e = rng
+            return f"{s.day} {MONTHS_GEN[s.month - 1]} – {e.day} {MONTHS_GEN[e.month - 1]}"
+        if p == "month":
+            return f"{MONTHS[a.month - 1]} {a.year}"
+        if p == "year":
+            return str(a.year)
+        return "Усі завдання"
+
+    def shift_period(delta):
+        p, a = state["period"], state["anchor"]
+        if p == "day":
+            a = a + datetime.timedelta(days=delta)
+        elif p == "week":
+            a = a + datetime.timedelta(days=7 * delta)
+        elif p == "month":
+            idx = a.month - 1 + delta
+            y, m = a.year + idx // 12, idx % 12 + 1
+            a = datetime.date(y, m, min(a.day, calendar.monthrange(y, m)[1]))
+        elif p == "year":
+            y = a.year + delta
+            a = datetime.date(y, a.month, min(a.day, calendar.monthrange(y, a.month)[1]))
+        state["anchor"] = a
+        render()
+
+    def set_period(p):
+        state["period"] = p
+        render()
+
+    def go_today_board(e):
+        state["anchor"] = datetime.date.today()
+        render()
+
+    def set_topic_filter(topic_id):
+        state["topic_filter"] = topic_id
+        render()
+
+    def matches(task):
+        if state["topic_filter"] is not None and task.get("topic_id") != state["topic_filter"]:
+            return False
+        rng = get_range()
+        if rng is None:
+            return True
+        due = task.get("due_date")
+        if not due:
+            return False
+        return rng[0].isoformat() <= due <= rng[1].isoformat()
+
+    def default_due_for_period():
+        rng = get_range()
+        t = datetime.date.today()
+        if rng is None:
+            return t.isoformat()
+        if rng[0] <= t <= rng[1]:
+            return t.isoformat()
+        return rng[0].isoformat()
 
     # ---------- вікно «нове / редагувати завдання» ----------
     def open_task_dialog(column_id, task=None, default_due=None, on_done=None):
@@ -110,7 +203,7 @@ def main(page: ft.Page):
             topic_row.controls = [
                 ft.Container(
                     content=ft.Text(name, size=12),
-                    bgcolor="#9CCBEA" if st["topic_id"] == tid else "#F1F1F1",
+                    bgcolor=CHIP_ON if st["topic_id"] == tid else "#F1F1F1",
                     padding=8,
                     border_radius=16,
                     on_click=lambda e, t=tid: pick_topic(t),
@@ -224,14 +317,12 @@ def main(page: ft.Page):
         body = card_body(task, idx, columns, with_buttons=True)
         body.on_click = lambda e, t=task: open_task_dialog(t["column_id"], t)
 
-        # те, що «летить» за курсором: трохи більше, нахилене, з тінню
         feedback = card_body(task, idx, columns, with_buttons=False)
         feedback.width = 256
         feedback.scale = 1.06
         feedback.rotate = 0.04
         feedback.shadow = ft.BoxShadow(blur_radius=18, color="#55000000", offset=ft.Offset(0, 6))
 
-        # бліда копія на старому місці
         ghost = card_body(task, idx, columns, with_buttons=False)
         ghost.opacity = 0.35
 
@@ -257,9 +348,12 @@ def main(page: ft.Page):
         return getattr(src, "data", None)
 
     def build_column(col, idx, columns):
-        cards = [build_card(t, idx, columns) for t in col["tasks"]]
-        add_btn = ft.TextButton("+ Додати завдання",
-                                on_click=lambda e, c=col["id"]: open_task_dialog(c))
+        visible = [t for t in col["tasks"] if matches(t)]
+        cards = [build_card(t, idx, columns) for t in visible]
+        add_btn = ft.TextButton(
+            "+ Додати завдання",
+            on_click=lambda e, c=col["id"]: open_task_dialog(c, default_due=default_due_for_period()),
+        )
         box = ft.Container(
             width=280,
             padding=12,
@@ -289,11 +383,51 @@ def main(page: ft.Page):
             on_accept=accept,
         )
 
+    def chip(text, active, on_click):
+        return ft.Container(
+            content=ft.Text(text, size=13, weight="bold" if active else "normal"),
+            bgcolor=CHIP_ON if active else CHIP_OFF,
+            padding=ft.Padding(left=14, top=8, right=14, bottom=8),
+            border_radius=16,
+            on_click=on_click,
+    )
+
     def build_board_view():
         columns = state["columns"]
+
+        header = ft.Text("Плани", size=26, weight="bold")
+
+        nav_controls = []
+        if state["period"] != "all":
+            nav_controls.append(ft.TextButton("‹", on_click=lambda e: shift_period(-1)))
+        nav_controls.append(ft.Text(period_title(), size=20, weight="bold"))
+        if state["period"] != "all":
+            nav_controls.append(ft.TextButton("›", on_click=lambda e: shift_period(1)))
+            nav_controls.append(ft.TextButton("Сьогодні", on_click=go_today_board))
+        nav = ft.Row(nav_controls, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        period_row = ft.Row(
+            [chip(label, state["period"] == key, lambda e, k=key: set_period(k))
+             for key, label in PERIODS],
+            spacing=8, wrap=True,
+        )
+
+        topic_chips = [chip("Усі теми", state["topic_filter"] is None,
+                            lambda e: set_topic_filter(None))]
+        for t in state["topics"]:
+            topic_chips.append(chip(f"#{t['name']}", state["topic_filter"] == t["id"],
+                                    lambda e, tid=t["id"]: set_topic_filter(tid)))
+        topic_row = ft.Row(topic_chips, spacing=8, wrap=True)
+
+        total = sum(1 for t in all_tasks() if matches(t))
         board = ft.Row([build_column(c, i, columns) for i, c in enumerate(columns)],
                        spacing=15, vertical_alignment=ft.CrossAxisAlignment.START, scroll="auto")
-        return [ft.Text("Дошка", size=26, weight="bold"), board]
+
+        parts = [header, nav, period_row, topic_row]
+        if total == 0:
+            parts.append(ft.Text("Тут поки нічого не заплановано. Спокійний час 🌿", color="#5B6B7A"))
+        parts.append(board)
+        return parts
 
     # ---------- календар ----------
     def open_day_dialog(d):
@@ -352,7 +486,7 @@ def main(page: ft.Page):
         state["month"], state["year"] = m, y
         render()
 
-    def go_today(e):
+    def go_today_calendar(e):
         t = datetime.date.today()
         state["year"], state["month"] = t.year, t.month
         render()
@@ -405,7 +539,7 @@ def main(page: ft.Page):
                 ft.TextButton("‹", on_click=lambda e: shift_month(-1)),
                 ft.Text(f"{MONTHS[m - 1]} {y}", size=24, weight="bold"),
                 ft.TextButton("›", on_click=lambda e: shift_month(1)),
-                ft.TextButton("Сьогодні", on_click=go_today),
+                ft.TextButton("Сьогодні", on_click=go_today_calendar),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
@@ -430,7 +564,7 @@ def main(page: ft.Page):
         render()
 
     def build_sidebar():
-        items = [("board", "🗂  Дошка"), ("calendar", "📅  Календар")]
+        items = [("board", "🗂  Плани"), ("calendar", "📅  Календар")]
         nav = []
         for key, label in items:
             active = state["view"] == key
