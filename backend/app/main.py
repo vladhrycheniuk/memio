@@ -7,7 +7,7 @@ Base.metadata.create_all(bind=engine)
 
 
 def seed():
-    """Створює користувача і 3 колонки при першому запуску."""
+    """Створює користувача, колонки й теми при першому запуску."""
     db = SessionLocal()
     try:
         if not db.get(models.User, 1):
@@ -15,6 +15,8 @@ def seed():
             db.flush()
             for i, title in enumerate(["Зробити", "В процесі", "Готово"]):
                 db.add(models.KanbanColumn(user_id=1, title=title, position=i))
+            for name in ["Навчання", "Робота", "Дім", "Особисте"]:
+                db.add(models.Topic(user_id=1, name=name))
             db.add(models.Streak(user_id=1))
             db.commit()
     finally:
@@ -29,4 +31,4 @@ app.include_router(tasks.router)
 
 @app.get("/")
 def root():
-    return {"message": "Memio працює 🌊"}
+    return {"message": "Memio працює"}

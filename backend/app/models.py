@@ -15,6 +15,7 @@ class User(Base):
 
     columns = relationship("KanbanColumn", back_populates="user", cascade="all, delete")
     tasks = relationship("Task", back_populates="user", cascade="all, delete")
+    topics = relationship("Topic", back_populates="user", cascade="all, delete")
     streak = relationship("Streak", back_populates="user", uselist=False, cascade="all, delete")
     memories = relationship("DailyMemory", back_populates="user", cascade="all, delete")
 
@@ -31,14 +32,26 @@ class KanbanColumn(Base):
     tasks = relationship("Task", back_populates="column", order_by="Task.position")
 
 
+class Topic(Base):
+    __tablename__ = "topics"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String(50), nullable=False)
+
+    user = relationship("User", back_populates="topics")
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     column_id = Column(Integer, ForeignKey("kanban_columns.id"), nullable=True)
+    topic_id = Column(Integer, ForeignKey("topics.id"), nullable=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
+    priority = Column(String(10), default="green")  # red / yellow / green
     position = Column(Integer, default=0)
     due_date = Column(Date, nullable=True)
     is_done = Column(Boolean, default=False)
@@ -47,6 +60,7 @@ class Task(Base):
 
     user = relationship("User", back_populates="tasks")
     column = relationship("KanbanColumn", back_populates="tasks")
+    topic = relationship("Topic")
 
 
 class Streak(Base):
