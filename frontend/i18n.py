@@ -9,7 +9,7 @@
 """
 import locale
 
-LANGS = {"uk": "Українська", "en": "English"}
+LANGS = {"uk": "Українська", "en": "English", "sv": "Svenska"}
 
 _state = {"lang": "uk"}
 
@@ -22,6 +22,15 @@ LISTS = {
         "weekdays": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"],
         "weekdays_full": ["Понеділок", "Вівторок", "Середа", "Четвер", "Пʼятниця",
                           "Субота", "Неділя"],
+    },
+    "sv": {
+        "months": ["Januari", "Februari", "Mars", "April", "Maj", "Juni",
+                   "Juli", "Augusti", "September", "Oktober", "November", "December"],
+        "months_gen": ["januari", "februari", "mars", "april", "maj", "juni",
+                       "juli", "augusti", "september", "oktober", "november", "december"],
+        "weekdays": ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"],
+        "weekdays_full": ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag",
+                          "Lördag", "Söndag"],
     },
     "en": {
         "months": ["January", "February", "March", "April", "May", "June",
@@ -103,6 +112,20 @@ EN = {
     "Усе зроблено, чудовий день 💙": "All done, a wonderful day 💙",
     "Іноді день це просто відпочинок 🌿": "Sometimes a day is just for resting 🌿",
     "Решту можна спокійно перенести 🌿": "The rest can calmly be moved 🌿",
+    # «Мій день» і «Щоденник»
+    "📖  Щоденник": "📖  Diary",
+    "Щоденник": "Diary",
+    "Справи дня": "Tasks of the day",
+    "Фото дня": "Photo of the day",
+    "Фото автоматично потрапляє в календар «Щоденник».":
+        "The photo automatically appears in the Diary calendar.",
+    "Фото й запис можна додати в сам день 🌿":
+        "You can add a photo and a note on the day itself 🌿",
+    "Збережено ✓": "Saved ✓",
+    "Дата": "Date",
+    "Завтра": "Tomorrow",
+    "Через тиждень": "In a week",
+    "Без дати": "No date",
     # друк
     "🖨 Друк місяця": "🖨 Print month",
     "Друк · {month} {year}": "Print · {month} {year}",
@@ -159,7 +182,141 @@ EN = {
         "Opened your mail app. If it did not open, write to {email}",
 }
 
-TRANSLATIONS = {"en": EN}
+SV = {
+    # меню та розділи
+    "🗂  Плани": "🗂  Planer",
+    "🌸  Мій день": "🌸  Min dag",
+    "📅  Календар": "📅  Kalender",
+    "📖  Щоденник": "📖  Dagbok",
+    "⚙  Налаштування": "⚙  Inställningar",
+    "💙  Про Memio": "💙  Om Memio",
+    "Меню": "Meny",
+    "Плани": "Planer",
+    "Календар": "Kalender",
+    "Мій день": "Min dag",
+    "Щоденник": "Dagbok",
+    "Налаштування": "Inställningar",
+    "Про Memio": "Om Memio",
+    # періоди, пріоритети, колонки, теми
+    "День": "Dag", "Тиждень": "Vecka", "Місяць": "Månad", "Рік": "År", "Усі": "Alla",
+    "Високий": "Hög", "Середній": "Medel", "Низький": "Låg",
+    "Зробити": "Att göra", "В процесі": "Pågår", "Готово": "Klart",
+    "Навчання": "Studier", "Робота": "Jobb", "Дім": "Hem", "Особисте": "Personligt",
+    "Хвиля": "Våg", "Сакура": "Körsbärsblom", "Мʼята": "Mynta", "Ніч": "Natt",
+    # завдання
+    "+ Додати завдання": "+ Lägg till uppgift",
+    "Нове завдання": "Ny uppgift",
+    "Редагувати завдання": "Redigera uppgift",
+    "Назва": "Titel",
+    "Введи назву": "Ange en titel",
+    "Опис (необовʼязково)": "Beskrivning (valfritt)",
+    "Пріоритет": "Prioritet",
+    "Тема": "Ämne",
+    "Без теми": "Inget ämne",
+    "Або нова тема": "Eller ett nytt ämne",
+    "Усі теми": "Alla ämnen",
+    "Усі завдання": "Alla uppgifter",
+    "Видалити": "Ta bort",
+    "Скасувати": "Avbryt",
+    "Зберегти": "Spara",
+    "Закрити": "Stäng",
+    "Сьогодні": "Idag",
+    "Сьогодні · ": "Idag · ",
+    "Дата": "Datum",
+    "Завтра": "Imorgon",
+    "Через тиждень": "Om en vecka",
+    "Без дати": "Inget datum",
+    "Перенести на сьогодні": "Flytta till idag",
+    "🌿 Невиконаних справ з минулих днів: {n}. Нічого страшного, їх можна перенести.":
+        "🌿 Oavslutade uppgifter från tidigare dagar: {n}. Ingen fara, de kan flyttas.",
+    "Тут поки нічого не заплановано. Спокійний час 🌿": "Inget planerat här än. Lugn tid 🌿",
+    "Поки нічого не заплановано. Спокійний день 🌿": "Inget planerat än. En lugn dag 🌿",
+    "+{n} ще": "+{n} till",
+    # календар, «Мій день», «Щоденник»
+    "Планування": "Planering",
+    "Підсумки": "Sammanfattning",
+    "Плани дня": "Dagens planer",
+    "Натисни на день, щоб додати фото, настрій і записку 🌸":
+        "Tryck på en dag för att lägga till foto, humör och anteckning 🌸",
+    "📷  Додати фото дня": "📷  Lägg till dagens foto",
+    "Змінити фото": "Byt foto",
+    "Прибрати фото": "Ta bort foto",
+    "Настрій": "Humör",
+    "Записка дня (до 280 символів)": "Dagens anteckning (upp till 280 tecken)",
+    "Обери фото дня": "Välj dagens foto",
+    "Зображення": "Bilder",
+    "Усі файли": "Alla filer",
+    "Не вдалося відкрити вибір файлу.": "Kunde inte öppna filväljaren.",
+    "Не вдалося завантажити фото.": "Kunde inte ladda upp fotot.",
+    "Не вдалося завантажити фото. Спробуй інший файл (jpg або png).":
+        "Kunde inte ladda upp fotot. Prova en annan fil (jpg eller png).",
+    "Справи дня": "Dagens uppgifter",
+    "Фото дня": "Dagens foto",
+    "Фото автоматично потрапляє в календар «Щоденник».":
+        "Fotot hamnar automatiskt i kalendern i Dagboken.",
+    "Фото й запис можна додати в сам день 🌿":
+        "Foto och anteckning kan läggas till under själva dagen 🌿",
+    "Збережено ✓": "Sparat ✓",
+    "Зроблено {done} з {total}": "Klart {done} av {total}",
+    "Усе зроблено, чудовий день 💙": "Allt klart, en underbar dag 💙",
+    "Іноді день це просто відпочинок 🌿": "Ibland är en dag bara vila 🌿",
+    "Решту можна спокійно перенести 🌿": "Resten kan lugnt flyttas 🌿",
+    # друк
+    "🖨 Друк місяця": "🖨 Skriv ut månaden",
+    "Друк · {month} {year}": "Utskrift · {month} {year}",
+    "Формат файлу": "Filformat",
+    "Орієнтація аркуша A4": "Orientering på A4-arket",
+    "Альбомна": "Liggande",
+    "Книжкова": "Stående",
+    "Рамка": "Ram",
+    "Без рамки": "Ingen ram",
+    "Лінія": "Linje",
+    "Подвійна": "Dubbel",
+    "Заокруглена": "Rundad",
+    "Пунктир": "Streckad",
+    "Колір рамки": "Ramfärg",
+    "Товщина рамки": "Ramtjocklek",
+    "Тонка": "Tunn",
+    "Середня": "Medel",
+    "Товста": "Tjock",
+    "Клітинки днів": "Dagrutor",
+    "Круглі кути": "Runda hörn",
+    "Прямі кути": "Raka hörn",
+    "З логотипом": "Med logotyp",
+    "Без логотипа": "Utan logotyp",
+    "Смайлики настрою не друкуються, лише фото й числа.":
+        "Humörsymboler skrivs inte ut, bara foton och datum.",
+    "Оновлюю перегляд…": "Uppdaterar förhandsvisningen…",
+    "Не вдалося створити перегляд": "Kunde inte skapa förhandsvisningen",
+    "Створити файл": "Skapa fil",
+    "Створюю файл…": "Skapar filen…",
+    "Не вдалося створити файл.": "Kunde inte skapa filen.",
+    "Готово: {file} (папка exports)": "Klart: {file} (mappen exports)",
+    "Відкрити папку": "Öppna mappen",
+    # налаштування
+    "Колірна тема": "Färgtema",
+    "Мова": "Språk",
+    "Налаштування зберігаються автоматично.": "Inställningarna sparas automatiskt.",
+    # про Memio
+    "Memio — затишний планувальник і щоденник: плануй день вранці, а ввечері зберігай його фото, настрій і записку.":
+        "Memio är en mysig planerare och dagbok: planera dagen på morgonen och spara kvällens foto, humör och anteckning.",
+    "Версія": "Version",
+    "Автор": "Skapare",
+    "Пошта": "E-post",
+    "Написати листа": "Skriv ett mejl",
+    "Сайт": "Webbplats",
+    "Підтримати проєкт": "Stöd projektet",
+    "Memio безкоштовний. Якщо він тобі подобається, можеш підтримати розробку.":
+        "Memio är gratis. Gillar du appen kan du stödja utvecklingen.",
+    "Відгук або ідея": "Feedback eller idé",
+    "Що б ти хотів змінити чи додати?": "Vad skulle du vilja ändra eller lägga till?",
+    "Надіслати поштою": "Skicka via e-post",
+    "Напиши кілька слів, щоб було що надсилати.": "Skriv några ord först.",
+    "Відкрив поштову програму. Якщо вона не відкрилась, напиши на {email}":
+        "Öppnade din e-postapp. Om den inte öppnades, skriv till {email}",
+}
+
+TRANSLATIONS = {"en": EN, "sv": SV}
 
 
 def set_language(code):
@@ -178,7 +335,8 @@ def tr(text):
     table = TRANSLATIONS.get(_state["lang"])
     if not table:
         return text
-    return table.get(text, text)
+    # якщо перекладу немає, пробуємо англійську, потім українську
+    return table.get(text) or EN.get(text) or text
 
 
 def detect_language():
@@ -189,4 +347,6 @@ def detect_language():
         code = ""
     if code.startswith("uk"):
         return "uk"
+    if code.startswith("sv"):
+        return "sv"
     return "en" if code else "uk"

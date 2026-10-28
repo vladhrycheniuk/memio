@@ -12,10 +12,13 @@ MONTHS = {
            "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"],
     "en": ["January", "February", "March", "April", "May", "June",
            "July", "August", "September", "October", "November", "December"],
+    "sv": ["Januari", "Februari", "Mars", "April", "Maj", "Juni",
+           "Juli", "Augusti", "September", "Oktober", "November", "December"],
 }
 WEEKDAYS = {
     "uk": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"],
     "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "sv": ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"],
 }
 
 REGULAR_FONTS = [
@@ -45,7 +48,7 @@ class PrintOptions:
     frame_width: str = "medium"    # thin / medium / thick
     corners: str = "round"         # round / square
     orientation: str = "portrait"  # portrait / landscape
-    language: str = "uk"           # uk / en
+    language: str = "uk"           # uk / en / sv
     show_logo: bool = True
 
 

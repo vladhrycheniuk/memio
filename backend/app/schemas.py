@@ -81,7 +81,7 @@ class PrintRequest(BaseModel):
     month: int = Field(ge=1, le=12)
     format: Literal["png", "pdf"] = "pdf"
     orientation: Literal["portrait", "landscape"] = "portrait"
-    language: Literal["uk", "en"] = "uk"
+    language: Literal["uk", "en", "sv"] = "uk"
     frame_style: Literal["none", "line", "double", "rounded", "dashed"] = "line"
     frame_color: str = Field(default="#9CCBEA", pattern=r"^#[0-9a-fA-F]{6}$")
     frame_width: Literal["thin", "medium", "thick"] = "medium"
