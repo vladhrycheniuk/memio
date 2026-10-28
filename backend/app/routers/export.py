@@ -55,6 +55,7 @@ def print_month(data: schemas.PrintRequest, db: Session = Depends(get_db)):
         frame_width=data.frame_width,
         corners=data.corners,
         orientation=data.orientation,
+        language=data.language,
         show_logo=data.show_logo,
     )
 

@@ -7,9 +7,16 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parents[2]
 
-MONTHS = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
-          "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"]
-WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"]
+MONTHS = {
+    "uk": ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
+           "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"],
+    "en": ["January", "February", "March", "April", "May", "June",
+           "July", "August", "September", "October", "November", "December"],
+}
+WEEKDAYS = {
+    "uk": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"],
+    "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+}
 
 REGULAR_FONTS = [
     ROOT / "assets" / "fonts" / "regular.ttf",
@@ -38,6 +45,7 @@ class PrintOptions:
     frame_width: str = "medium"    # thin / medium / thick
     corners: str = "round"         # round / square
     orientation: str = "portrait"  # portrait / landscape
+    language: str = "uk"           # uk / en
     show_logo: bool = True
 
 
@@ -144,7 +152,7 @@ def render_month(year, month, photos, opts, dpi=300, logo_path=None):
 
     # заголовок
     title_font = load_font(S(150), bold=True)
-    draw_centered(d, W / 2, margin, f"{MONTHS[month - 1]} {year}", title_font, TEXT_DARK)
+    draw_centered(d, W / 2, margin, f"{MONTHS.get(opts.language, MONTHS['uk'])[month - 1]} {year}", title_font, TEXT_DARK)
     ul_w, ul_y = S(260), margin + S(215)
     d.line([(W / 2 - ul_w / 2, ul_y), (W / 2 + ul_w / 2, ul_y)], fill=color, width=S(8))
 
@@ -161,7 +169,7 @@ def render_month(year, month, photos, opts, dpi=300, logo_path=None):
 
     # дні тижня
     wd_font = load_font(S(46))
-    for col, name in enumerate(WEEKDAYS):
+    for col, name in enumerate(WEEKDAYS.get(opts.language, WEEKDAYS["uk"])):
         cx = left0 + col * (cell_w + gap) + cell_w / 2
         draw_centered(d, cx, grid_top - S(80), name, wd_font, TEXT_SOFT)
 
