@@ -41,17 +41,94 @@ FRAME_COLORS = [
     ("#5B6B7A", "Графіт"),
 ]
 
-COL_BG = "#CFE6F5"
-COL_HOVER = "#B5D9F0"
-CHIP_ON = "#9CCBEA"
-CHIP_OFF = "#FFFFFF"
+THEMES = {
+    "blue": {
+        "name": "Хвиля", "dot": "#9CCBEA", "dark": False,
+        "bg": "#EAF4FB", "surface": "#FFFFFF", "surface_alt": "#F3F8FC",
+        "column": "#CFE6F5", "column_hover": "#B5D9F0",
+        "accent": "#4A90C2", "accent_soft": "#9CCBEA", "on_accent": "#FFFFFF",
+        "chip_off": "#FFFFFF", "text": "#1F2D3A", "text_soft": "#5B6B7A",
+        "text_muted": "#8A98A5", "done": "#3F8F5B",
+        "warn_bg": "#FFF4D6", "logo_plate": None,
+    },
+    "pink": {
+        "name": "Сакура", "dot": "#F4B6C2", "dark": False,
+        "bg": "#FDF0F3", "surface": "#FFFFFF", "surface_alt": "#FEF7F9",
+        "column": "#F9DCE4", "column_hover": "#F4C8D5",
+        "accent": "#D9708C", "accent_soft": "#F4B6C2", "on_accent": "#FFFFFF",
+        "chip_off": "#FFFFFF", "text": "#3A2530", "text_soft": "#7A5A68",
+        "text_muted": "#A68A96", "done": "#3F8F5B",
+        "warn_bg": "#FFF4D6", "logo_plate": None,
+    },
+    "mint": {
+        "name": "Мʼята", "dot": "#A8DCC0", "dark": False,
+        "bg": "#EDF7F1", "surface": "#FFFFFF", "surface_alt": "#F5FBF8",
+        "column": "#D3EBDD", "column_hover": "#BFE0CE",
+        "accent": "#4E9E78", "accent_soft": "#A8DCC0", "on_accent": "#FFFFFF",
+        "chip_off": "#FFFFFF", "text": "#1F3328", "text_soft": "#55705F",
+        "text_muted": "#8AA394", "done": "#3F8F5B",
+        "warn_bg": "#FFF4D6", "logo_plate": None,
+    },
+    "night": {
+        "name": "Ніч", "dot": "#3E6A8E", "dark": True,
+        "bg": "#1B2430", "surface": "#26323F", "surface_alt": "#202B37",
+        "column": "#2C3A4A", "column_hover": "#36485C",
+        "accent": "#8FC3EA", "accent_soft": "#3E6A8E", "on_accent": "#16202B",
+        "chip_off": "#2C3A4A", "text": "#E8EEF4", "text_soft": "#A9B7C5",
+        "text_muted": "#7F8E9D", "done": "#7CC59A",
+        "warn_bg": "#4A4125", "logo_plate": "#FFFFFF",
+    },
+}
+THEME = dict(THEMES["blue"])
+T = THEME
+OVERLAY_BG = "#CCFFFFFF"     # напівпрозорі плашки поверх фото
+OVERLAY_TEXT = "#1F2D3A"
 
-SB_CLOSED = 34
+SETTINGS_FILE = ROOT / "settings.json"
+FONT_REGULAR = ROOT / "assets" / "fonts" / "Nunito-Regular.ttf"
+
+SB_HANDLE = 34
 SB_OPEN = 210
 SB_GAP = 14
+ANIM_MS = 260
 
 _FitEnum = getattr(ft, "BoxFit", None) or getattr(ft, "ImageFit", None)
 FIT_COVER = _FitEnum.COVER if _FitEnum else "cover"
+
+
+def load_settings():
+    try:
+        import json
+        return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_settings(data):
+    try:
+        import json
+        SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def apply_theme_colors(key):
+    THEME.clear()
+    THEME.update(THEMES.get(key, THEMES["blue"]))
+
+
+def make_anim(ms=ANIM_MS):
+    """Анімація, що працює у різних версіях Flet; None, якщо недоступна."""
+    for build in (
+        lambda: ft.Animation(ms, ft.AnimationCurve.EASE_OUT),
+        lambda: ft.Animation(ms, "easeOut"),
+        lambda: ft.Animation(ms),
+    ):
+        try:
+            return build()
+        except Exception:
+            continue
+    return None
 
 
 def photo_url(name):
@@ -92,8 +169,32 @@ def pick_photo_path():
 
 def main(page: ft.Page):
     page.title = "Memio"
-    page.bgcolor = "#EAF4FB"
     page.padding = 20
+
+    def apply_page_theme():
+        """Колір сторінки, світлий/темний режим, акцент і шрифт."""
+        page.bgcolor = T["bg"]
+        try:
+            page.theme_mode = ft.ThemeMode.DARK if T["dark"] else ft.ThemeMode.LIGHT
+        except Exception:
+            pass
+        options = {"color_scheme_seed": T["accent"]}
+        if FONT_REGULAR.exists():
+            try:
+                page.fonts = {"Nunito": "fonts/Nunito-Regular.ttf"}
+                options["font_family"] = "Nunito"
+            except Exception:
+                pass
+        for opts in (options, {k: v for k, v in options.items() if k == "font_family"}):
+            try:
+                page.theme = ft.Theme(**opts)
+                page.dark_theme = ft.Theme(**opts)
+                break
+            except Exception:
+                continue
+
+    apply_theme_colors(load_settings().get("theme", "blue"))
+    apply_page_theme()
 
     today = datetime.date.today()
     state = {
@@ -106,16 +207,22 @@ def main(page: ft.Page):
         "columns": [],
         "topics": [],
         "sidebar_open": False,
+        "theme": load_settings().get("theme", "blue"),
     }
 
     content_area = ft.Column(expand=True, scroll="auto", spacing=15)
-    sidebar = ft.Container(width=SB_CLOSED, bgcolor="white", border_radius=16,
-                           left=0, top=0, bottom=0)
+    # меню має повну ширину й висувається вліво/вправо, а вміст зсувається разом із ним
+    sidebar = ft.Container(width=SB_OPEN, bgcolor=T["surface"], border_radius=16,
+                           left=-(SB_OPEN - SB_HANDLE), top=0, bottom=0)
     content_wrap = ft.Container(
         content=content_area,
         left=0, top=0, right=0, bottom=0,
-        padding=ft.Padding(left=SB_CLOSED + SB_GAP, top=0, right=0, bottom=0),
+        padding=ft.Padding(left=SB_HANDLE + SB_GAP, top=0, right=0, bottom=0),
     )
+    _anim = make_anim()
+    if _anim is not None:
+        sidebar.animate_position = _anim
+        content_wrap.animate = _anim
 
     # ---------- діалоги (старі й нові версії Flet) ----------
     def open_dialog(dlg):
@@ -277,7 +384,7 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Row([ft.Text("●", color=color), ft.Text(label, size=12)],
                                    spacing=5, tight=True),
-                    bgcolor=color if st["priority"] == key else "#F1F1F1",
+                    bgcolor=color if st["priority"] == key else T["surface_alt"],
                     padding=8,
                     border_radius=16,
                     on_click=lambda e, k=key: pick_priority(k),
@@ -288,7 +395,7 @@ def main(page: ft.Page):
             topic_row.controls = [
                 ft.Container(
                     content=ft.Text(name, size=12),
-                    bgcolor=CHIP_ON if st["topic_id"] == tid else "#F1F1F1",
+                    bgcolor=T["accent_soft"] if st["topic_id"] == tid else T["surface_alt"],
                     padding=8,
                     border_radius=16,
                     on_click=lambda e, t=tid: pick_topic(t),
@@ -354,6 +461,7 @@ def main(page: ft.Page):
         actions.append(ft.TextButton("Зберегти", on_click=save))
 
         dlg = ft.AlertDialog(
+            bgcolor=T["surface"],
             title=ft.Text("Редагувати завдання" if task else "Нове завдання"),
             content=ft.Column(
                 [title, desc, due,
@@ -369,17 +477,17 @@ def main(page: ft.Page):
     # ---------- картки (з перетягуванням) ----------
     def card_body(task, idx, columns, with_buttons):
         color = PRIORITIES.get(task.get("priority"), PRIORITIES["green"])[0]
-        title_color = "#8A98A5" if task.get("is_done") else "#1F2D3A"
+        title_color = T["text_muted"] if task.get("is_done") else T["text"]
 
         lines = [ft.Row([ft.Text("●", color=color, size=16),
                          ft.Text(task["title"], size=15, weight="bold",
                                  color=title_color, expand=True)], spacing=6)]
         if task.get("topic"):
-            lines.append(ft.Text(f"#{task['topic']['name']}", size=11, color="#4A90C2"))
+            lines.append(ft.Text(f"#{task['topic']['name']}", size=11, color=T["accent"]))
         if task.get("description"):
-            lines.append(ft.Text(task["description"], size=12, color="#5B6B7A"))
+            lines.append(ft.Text(task["description"], size=12, color=T["text_soft"]))
         if task.get("due_date"):
-            lines.append(ft.Text(f"📅 {task['due_date']}", size=12, color="#5B6B7A"))
+            lines.append(ft.Text(f"📅 {task['due_date']}", size=12, color=T["text_soft"]))
 
         if with_buttons:
             buttons = []
@@ -393,7 +501,7 @@ def main(page: ft.Page):
 
         return ft.Container(
             content=ft.Column(lines, spacing=3),
-            bgcolor="white",
+            bgcolor=T["surface"],
             padding=10,
             border_radius=12,
         )
@@ -441,17 +549,17 @@ def main(page: ft.Page):
         box = ft.Container(
             width=280,
             padding=12,
-            bgcolor=COL_BG,
+            bgcolor=T["column"],
             border_radius=16,
             content=ft.Column([ft.Text(col["title"], size=18, weight="bold"), *cards, add_btn]),
         )
 
         def will_accept(e):
-            box.bgcolor = COL_HOVER
+            box.bgcolor = T["column_hover"]
             page.update()
 
         def leave(e):
-            box.bgcolor = COL_BG
+            box.bgcolor = T["column"]
             page.update()
 
         def accept(e):
@@ -470,7 +578,7 @@ def main(page: ft.Page):
     def chip(text, active, on_click):
         return ft.Container(
             content=ft.Text(text, size=13, weight="bold" if active else "normal"),
-            bgcolor=CHIP_ON if active else CHIP_OFF,
+            bgcolor=T["accent_soft"] if active else T["chip_off"],
             padding=ft.Padding(left=14, top=8, right=14, bottom=8),
             border_radius=16,
             on_click=on_click,
@@ -517,17 +625,17 @@ def main(page: ft.Page):
                 content=ft.Row(
                     [ft.Text(f"🌿 Невиконаних справ з минулих днів: {len(overdue)}. "
                              "Нічого страшного, їх можна перенести.",
-                             size=13, color="#4A5A68", expand=True),
+                             size=13, color=T["text_soft"], expand=True),
                      ft.TextButton("Перенести на сьогодні", on_click=carry_over)],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                bgcolor="#FFF4D6",
+                bgcolor=T["warn_bg"],
                 padding=ft.Padding(left=14, top=6, right=8, bottom=6),
                 border_radius=12,
             ))
 
         if total == 0:
-            parts.append(ft.Text("Тут поки нічого не заплановано. Спокійний час 🌿", color="#5B6B7A"))
+            parts.append(ft.Text("Тут поки нічого не заплановано. Спокійний час 🌿", color=T["text_soft"]))
         parts.append(board)
         return parts
 
@@ -553,22 +661,23 @@ def main(page: ft.Page):
             color = PRIORITIES.get(t.get("priority"), PRIORITIES["green"])[0]
             info = [ft.Text(("✓ " if t.get("is_done") else "") + t["title"], size=14, weight="bold")]
             if t.get("topic"):
-                info.append(ft.Text(f"#{t['topic']['name']}", size=11, color="#4A90C2"))
+                info.append(ft.Text(f"#{t['topic']['name']}", size=11, color=T["accent"]))
             if t.get("description"):
-                info.append(ft.Text(t["description"], size=12, color="#5B6B7A"))
+                info.append(ft.Text(t["description"], size=12, color=T["text_soft"]))
             rows.append(ft.Container(
                 content=ft.Row([ft.Text("●", color=color, size=16),
                                 ft.Column(info, spacing=2, expand=True)], spacing=8),
-                bgcolor="#F3F8FC",
+                bgcolor=T["surface_alt"],
                 padding=10,
                 border_radius=10,
                 on_click=lambda e, t=t: edit_task(t),
             ))
         if not rows:
-            rows = [ft.Text("Поки нічого не заплановано. Спокійний день 🌿", color="#5B6B7A")]
+            rows = [ft.Text("Поки нічого не заплановано. Спокійний день 🌿", color=T["text_soft"])]
 
         title = f"{WEEKDAYS_FULL[d.weekday()]}, {d.day} {MONTHS_GEN[d.month - 1]}"
         dlg = ft.AlertDialog(
+            bgcolor=T["surface"],
             title=ft.Text(title),
             content=ft.Column(rows, tight=True, width=380, scroll="auto", spacing=8),
             actions=[
@@ -602,12 +711,12 @@ def main(page: ft.Page):
             else:
                 photo_holder.content = ft.Container(
                     content=ft.Column(
-                        [ft.Text("📷  Додати фото дня", size=14, color="#4A90C2")],
+                        [ft.Text("📷  Додати фото дня", size=14, color=T["accent"])],
                         height=120, width=380,
                         alignment=ft.MainAxisAlignment.CENTER,
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    bgcolor="#EAF4FB",
+                    bgcolor=T["surface_alt"],
                     border_radius=12,
                     on_click=pick,
                 )
@@ -618,7 +727,7 @@ def main(page: ft.Page):
             mood_row.controls = [
                 ft.Container(
                     content=ft.Text(m, size=22),
-                    bgcolor=CHIP_ON if data["mood"] == m else "#F1F1F1",
+                    bgcolor=T["accent_soft"] if data["mood"] == m else T["surface_alt"],
                     padding=ft.Padding(left=8, top=4, right=8, bottom=4),
                     border_radius=14,
                     on_click=lambda e, m=m: pick_mood(m),
@@ -684,7 +793,7 @@ def main(page: ft.Page):
         todo = [t for t in day_tasks if not t.get("is_done")]
         if not day_tasks:
             task_block = [ft.Text("На цей день нічого не було заплановано 🌿",
-                                  size=13, color="#5B6B7A")]
+                                  size=13, color=T["text_soft"])]
         else:
             if len(done) == len(day_tasks):
                 hint = "Усе зроблено, чудовий день 💙"
@@ -694,16 +803,17 @@ def main(page: ft.Page):
                 hint = "Решту можна спокійно перенести 🌿"
             task_block = [
                 ft.Text(f"Зроблено {len(done)} з {len(day_tasks)}", size=14, weight="bold"),
-                ft.Text(hint, size=12, color="#5B6B7A"),
+                ft.Text(hint, size=12, color=T["text_soft"]),
             ]
-            task_block += [ft.Text("✓ " + t["title"], size=13, color="#3F8F5B") for t in done]
-            task_block += [ft.Text("○ " + t["title"], size=13, color="#8A98A5") for t in todo]
+            task_block += [ft.Text("✓ " + t["title"], size=13, color=T["done"]) for t in done]
+            task_block += [ft.Text("○ " + t["title"], size=13, color=T["text_muted"]) for t in todo]
 
         refresh_photo(update=False)
         refresh_mood(update=False)
 
         title = f"{d.day} {MONTHS_GEN[d.month - 1]} · {WEEKDAYS_FULL[d.weekday()]}"
         dlg = ft.AlertDialog(
+            bgcolor=T["surface"],
             title=ft.Text(title),
             content=ft.Column(
                 [photo_holder,
@@ -736,7 +846,7 @@ def main(page: ft.Page):
 
         rows_col = ft.Column(spacing=6)
         preview_holder = ft.Container(width=300)
-        status = ft.Text("", size=12, color="#3F8F5B")
+        status = ft.Text("", size=12, color=T["done"])
 
         def payload(preview):
             return {"year": y, "month": m, "preview": preview, **st}
@@ -747,7 +857,7 @@ def main(page: ft.Page):
                              horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
         def label(text):
-            return ft.Text(text, size=12, color="#5B6B7A")
+            return ft.Text(text, size=12, color=T["text_soft"])
 
         def chips_row(key, options):
             return ft.Row(
@@ -784,11 +894,11 @@ def main(page: ft.Page):
                 chips_row("corners", [("round", "Круглі кути"), ("square", "Прямі кути")]),
                 chips_row("show_logo", [(True, "З логотипом"), (False, "Без логотипа")]),
                 ft.Text("Смайлики настрою не друкуються, лише фото й числа.",
-                        size=11, color="#8A98A5"),
+                        size=11, color=T["text_muted"]),
             ]
 
         def refresh_preview():
-            preview_holder.content = ft.Text("Оновлюю перегляд…", size=12, color="#5B6B7A")
+            preview_holder.content = ft.Text("Оновлюю перегляд…", size=12, color=T["text_soft"])
             page.update()
             try:
                 r = requests.post(f"{API}/print/month", json=payload(True), timeout=60)
@@ -830,6 +940,7 @@ def main(page: ft.Page):
 
         rebuild()
         dlg = ft.AlertDialog(
+            bgcolor=T["surface"],
             title=ft.Text(f"Друк · {MONTHS[m - 1]} {y}"),
             content=ft.Column(
                 [ft.Row([ft.Container(rows_col, width=330), preview_holder],
@@ -872,10 +983,10 @@ def main(page: ft.Page):
         in_month = d.month == state["month"]
         is_today = d == datetime.date.today()
 
-        num_color = "white" if is_today else ("#1F2D3A" if in_month else "#9AA7B2")
+        num_color = T["on_accent"] if is_today else (T["text"] if in_month else T["text_muted"])
         num = ft.Container(
             content=ft.Text(str(d.day), size=12, weight="bold", color=num_color),
-            bgcolor="#4A90C2" if is_today else None,
+            bgcolor=T["accent"] if is_today else None,
             padding=4,
             border_radius=10,
         )
@@ -891,14 +1002,14 @@ def main(page: ft.Page):
                 border_radius=6,
             ))
         if len(day_tasks) > 3:
-            items.append(ft.Text(f"+{len(day_tasks) - 3} ще", size=11, color="#5B6B7A"))
+            items.append(ft.Text(f"+{len(day_tasks) - 3} ще", size=11, color=T["text_soft"]))
 
         return ft.Container(
             content=ft.Column(items, spacing=2),
             expand=1,
             height=125,
             padding=6,
-            bgcolor="white" if in_month else "#F3F8FC",
+            bgcolor=T["surface"] if in_month else T["surface_alt"],
             border_radius=10,
             on_click=lambda e, day=d: on_day_click("plan", day),
         )
@@ -915,10 +1026,10 @@ def main(page: ft.Page):
             layers.append(ft.Image(src=photo_url(photo), fit=FIT_COVER, border_radius=10,
                                    left=0, top=0, right=0, bottom=0))
 
-        num_color = "white" if is_today else "#1F2D3A"
+        num_color = T["on_accent"] if is_today else OVERLAY_TEXT
         layers.append(ft.Container(
             content=ft.Text(str(d.day), size=12, weight="bold", color=num_color),
-            bgcolor="#4A90C2" if is_today else "#CCFFFFFF",
+            bgcolor=T["accent"] if is_today else OVERLAY_BG,
             padding=ft.Padding(left=6, top=2, right=6, bottom=2),
             border_radius=10,
             left=6, top=6,
@@ -934,13 +1045,13 @@ def main(page: ft.Page):
             done = sum(1 for t in day_tasks if t.get("is_done"))
             layers.append(ft.Container(
                 content=ft.Text(f"✓ {done}/{len(day_tasks)}", size=11, color="#33404D"),
-                bgcolor="#CCFFFFFF",
+                bgcolor=OVERLAY_BG,
                 padding=ft.Padding(left=6, top=2, right=6, bottom=2),
                 border_radius=8,
                 left=6, bottom=6,
             ))
 
-        bg = "#F3F8FC" if d > datetime.date.today() else "white"
+        bg = T["surface_alt"] if d > datetime.date.today() else T["surface"]
 
         return ft.Container(
             content=ft.Stack(layers, height=125),
@@ -991,7 +1102,7 @@ def main(page: ft.Page):
         )
 
         weekdays = ft.Row(
-            [ft.Container(ft.Text(w, size=12, color="#5B6B7A", text_align=ft.TextAlign.CENTER),
+            [ft.Container(ft.Text(w, size=12, color=T["text_soft"], text_align=ft.TextAlign.CENTER),
                           expand=1) for w in WEEKDAYS],
             spacing=6,
         )
@@ -1011,46 +1122,92 @@ def main(page: ft.Page):
         parts = [title, style_row, header]
         if mode == "summary":
             parts.append(ft.Text("Натисни на день, щоб додати фото, настрій і записку 🌸",
-                                 size=12, color="#5B6B7A"))
+                                 size=12, color=T["text_soft"]))
         parts += [weekdays, grid]
         return parts
 
-    # ---------- бокове меню (ховається й зсуває вміст) ----------
+    # ---------- бокове меню (висувається й зсуває вміст) ----------
     def go(view):
         state["view"] = view
         render()
 
+    def set_theme(key):
+        state["theme"] = key
+        apply_theme_colors(key)
+        apply_page_theme()
+        settings = load_settings()
+        settings["theme"] = key
+        save_settings(settings)
+        render()
+
+    def toggle_sidebar(e):
+        state["sidebar_open"] = not state["sidebar_open"]
+        refresh_sidebar(rebuild=False)
+
     def build_sidebar():
-        if not state["sidebar_open"]:
-            return ft.Container(
-                content=ft.Text("☰", size=18, color="#4A90C2"),
-                padding=ft.Padding(left=8, top=12, right=0, bottom=0),
-            )
         items = [("board", "🗂  Плани"), ("calendar", "📅  Календар"), ("myday", "🌸  Мій день")]
         nav = []
         for key, label in items:
             active = state["view"] == key
             nav.append(ft.Container(
-                content=ft.Text(label, size=15, weight="bold" if active else "normal"),
-                bgcolor=COL_BG if active else None,
+                content=ft.Text(label, size=15, weight="bold" if active else "normal",
+                                color=T["text"]),
+                bgcolor=T["column"] if active else None,
                 padding=12,
                 border_radius=12,
                 on_click=lambda e, k=key: go(k),
             ))
-        return ft.Container(
-            content=ft.Column([ft.Text("Меню", size=12, color="#8A98A5"), *nav], spacing=6),
-            padding=16,
-        )
 
-    def refresh_sidebar(update=True):
+        swatches = []
+        for key, th in THEMES.items():
+            selected = state["theme"] == key
+            swatches.append(ft.Container(
+                content=ft.Column(
+                    [ft.Text("✓" if selected else "", size=12, color=th["on_accent"]
+                             if not th["dark"] else "#FFFFFF")],
+                    width=26, height=26,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                width=26, height=26,
+                bgcolor=th["dot"],
+                border_radius=13,
+                on_click=lambda e, k=key: set_theme(k),
+            ))
+
+        menu = ft.Container(
+            content=ft.Column(
+                [ft.Text("Меню", size=12, color=T["text_muted"]),
+                 *nav,
+                 ft.Container(height=14),
+                 ft.Text("Тема", size=12, color=T["text_muted"]),
+                 ft.Row(swatches, spacing=8)],
+                spacing=6,
+            ),
+            width=SB_OPEN - SB_HANDLE,
+            padding=ft.Padding(left=12, top=16, right=4, bottom=12),
+        )
+        handle = ft.Container(
+            content=ft.Text("☰", size=18, color=T["accent"]),
+            width=SB_HANDLE,
+            height=56,
+            padding=ft.Padding(left=8, top=14, right=0, bottom=0),
+            on_click=toggle_sidebar,
+        )
+        return ft.Row([menu, handle], spacing=0,
+                      vertical_alignment=ft.CrossAxisAlignment.START)
+
+    def refresh_sidebar(update=True, rebuild=True):
         is_open = state["sidebar_open"]
-        width = SB_OPEN if is_open else SB_CLOSED
-        sidebar.width = width
+        sidebar.left = 0 if is_open else -(SB_OPEN - SB_HANDLE)
+        sidebar.bgcolor = T["surface"]
         sidebar.shadow = (ft.BoxShadow(blur_radius=20, color="#33000000", offset=ft.Offset(2, 0))
                           if is_open else None)
-        sidebar.content = build_sidebar()
+        if rebuild:
+            sidebar.content = build_sidebar()
         # вміст зсувається разом із краєм меню, а не ховається під ним
-        content_wrap.padding = ft.Padding(left=width + SB_GAP, top=0, right=0, bottom=0)
+        content_wrap.padding = ft.Padding(
+            left=(SB_OPEN if is_open else SB_HANDLE) + SB_GAP, top=0, right=0, bottom=0)
         if update:
             page.update()
 
@@ -1058,14 +1215,20 @@ def main(page: ft.Page):
         inside = str(e.data).lower() == "true"
         if inside != state["sidebar_open"]:
             state["sidebar_open"] = inside
-            refresh_sidebar()
+            refresh_sidebar(rebuild=False)
 
     sidebar.on_hover = on_sidebar_hover
 
     # ---------- загальний рендер ----------
     def render():
         refresh_sidebar(update=False)
-        logo = ft.Row([ft.Image(src="logo.png", height=44)])
+        logo_img = ft.Image(src="logo.png", height=44)
+        if T["logo_plate"]:
+            logo = ft.Row([ft.Container(
+                content=logo_img, bgcolor=T["logo_plate"], border_radius=12,
+                padding=ft.Padding(left=10, top=4, right=10, bottom=4))])
+        else:
+            logo = ft.Row([logo_img])
         if state["view"] == "calendar":
             parts = build_calendar_view("plan")
         elif state["view"] == "myday":

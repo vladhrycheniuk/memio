@@ -9,3 +9,4 @@ uploads/*
 .vscode/
 exports/
 "@ | Set-Content .gitignore -Encoding utf8
+settings.json
