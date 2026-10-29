@@ -33,6 +33,10 @@ MONTHS_GEN = ["січня", "лютого", "березня", "квітня", "�
 WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"]
 WEEKDAYS_FULL = ["Понеділок", "Вівторок", "Середа", "Четвер", "Пʼятниця", "Субота", "Неділя"]
 
+REPEATS = [(None, "Не повторювати"), ("daily", "Щодня"), ("weekdays", "По буднях"),
+           ("weekly", "Щотижня"), ("monthly", "Щомісяця")]
+REPEAT_LABELS = {key: label for key, label in REPEATS if key}
+
 PERIODS = [("day", "День"), ("week", "Тиждень"), ("month", "Місяць"),
            ("year", "Рік"), ("all", "Усі")]
 
@@ -430,6 +434,8 @@ def main(page: ft.Page):
             "priority": (task or {}).get("priority", "green"),
             "topic_id": (task or {}).get("topic_id"),
             "due": datetime.date.fromisoformat(due_src) if due_src else None,
+            "recurrence": (task or {}).get("recurrence"),
+            "is_focus": bool((task or {}).get("is_focus")),
         }
 
         title = make_field(label=tr("Назва"), value=task["title"] if task else "", autofocus=True)
@@ -442,6 +448,17 @@ def main(page: ft.Page):
         date_row = ft.Row(spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         prio_row = ft.Row(spacing=8, wrap=True)
         topic_row = ft.Row(spacing=6, wrap=True)
+        repeat_row = ft.Row(spacing=6, wrap=True)
+        focus_row = ft.Row(spacing=6)
+        form_msg = ft.Text("", size=12, color="#B45309")
+
+        def set_repeat(value):
+            st["recurrence"] = value
+            refresh()
+
+        def toggle_focus_flag():
+            st["is_focus"] = not st["is_focus"]
+            refresh()
 
         def set_due(value):
             st["due"] = value
@@ -469,6 +486,13 @@ def main(page: ft.Page):
             quick_row.controls = [
                 chip(text, st["due"] == value, lambda e, v=value: set_due(v))
                 for text, value in quick
+            ]
+            repeat_row.controls = [
+                chip(tr(label), st["recurrence"] == value, lambda e, v=value: set_repeat(v))
+                for value, label in REPEATS
+            ]
+            focus_row.controls = [
+                chip(tr("★ Головне на день"), st["is_focus"], lambda e: toggle_focus_flag())
             ]
             date_row.controls = [
                 ft.TextButton("‹", on_click=lambda e: shift_due(-1)),
@@ -518,12 +542,19 @@ def main(page: ft.Page):
                 "due_date": st["due"].isoformat() if st["due"] else None,
                 "topic_id": topic_id,
                 "priority": st["priority"],
+                "recurrence": st["recurrence"],
+                "is_focus": st["is_focus"],
             }
             if task:
-                requests.patch(f"{API}/tasks/{task['id']}", json=payload)
+                r = requests.patch(f"{API}/tasks/{task['id']}", json=payload)
             else:
                 payload["column_id"] = column_id
-                requests.post(f"{API}/tasks", json=payload)
+                r = requests.post(f"{API}/tasks", json=payload)
+            if not r.ok:
+                form_msg.value = (tr("Головних справ може бути не більше трьох.")
+                                  if st["is_focus"] else tr("Не вдалося зберегти завдання."))
+                page.update()
+                return
             finish()
 
         def remove(e):
@@ -549,7 +580,9 @@ def main(page: ft.Page):
                 [title, desc,
                  small_label(tr("Дата")), quick_row, date_row,
                  small_label(tr("Пріоритет")), prio_row,
-                 small_label(tr("Тема")), topic_row, new_topic],
+                 small_label(tr("Повтор")), repeat_row, focus_row,
+                 small_label(tr("Тема")), topic_row, new_topic,
+                 form_msg],
                 tight=True, width=440, scroll="auto", spacing=10,
             ),
             actions=actions,
@@ -563,8 +596,12 @@ def main(page: ft.Page):
         title_color = T["text_muted"] if task.get("is_done") else T["text"]
 
         lines = [ft.Row([ft.Text("●", color=color, size=16),
-                         ft.Text(task["title"], size=15, weight="bold",
+                         ft.Text(("★ " if task.get("is_focus") else "") + task["title"],
+                                 size=15, weight="bold",
                                  color=title_color, expand=True)], spacing=6)]
+        if task.get("recurrence"):
+            lines.append(ft.Text("↻ " + tr(REPEAT_LABELS.get(task["recurrence"], "")),
+                                 size=11, color=T["text_muted"]))
         if task.get("topic"):
             lines.append(ft.Text(f"#{tr(task['topic']['name'])}", size=11, color=T["accent"]))
         if task.get("description"):
@@ -842,6 +879,42 @@ def main(page: ft.Page):
         target = columns[0]["id"] if task.get("is_done") else columns[-1]["id"]
         move(task["id"], target)
 
+    def toggle_focus(task):
+        flush_note()
+        r = requests.patch(f"{API}/tasks/{task['id']}",
+                           json={"is_focus": not task.get("is_focus")})
+        if not r.ok:
+            state["task_msg"] = tr("Головних справ може бути не більше трьох.")
+        load()
+
+    def fill_stats(rows, y, m):
+        prefix = f"{y}-{m:02d}-"
+        filled = sum(
+            1 for r in rows
+            if str(r.get("memory_date", "")).startswith(prefix)
+            and (r.get("photo_path") or r.get("note") or r.get("mood_emoji")))
+        return filled, calendar.monthrange(y, m)[1]
+
+    def month_fill_card(filled, total, month_name, on_click=None):
+        if filled == 0:
+            note = tr("Кожен день це маленька історія. Почни з сьогоднішнього 🌱")
+        elif filled >= total:
+            note = tr("Місяць заповнено! Можна друкувати календар 🌸")
+        else:
+            note = tr("Дні можна дописувати пізніше, нічого не згорає 🌿")
+        track_w = 360
+        return ft.Container(
+            content=ft.Column([
+                ft.Text(f"{month_name} · " + tr("Заповнено {filled} з {total} днів").format(
+                    filled=filled, total=total), size=14, weight="bold", color=T["text"]),
+                ft.Container(
+                    width=track_w, height=8, bgcolor=T["surface_alt"], border_radius=4,
+                    content=ft.Container(width=max(0, int(track_w * filled / total)), height=8,
+                                         bgcolor=T["accent"], border_radius=4)),
+                ft.Text(note, size=12, color=T["text_muted"]),
+            ], spacing=6),
+            bgcolor=T["surface"], padding=16, border_radius=16, on_click=on_click)
+
     def build_day_view():
         d = state["day"]
         iso = d.isoformat()
@@ -938,6 +1011,9 @@ def main(page: ft.Page):
         # --- права частина: справи дня ---
         day_tasks = [t for t in all_tasks() if t.get("due_date") == iso]
         done = [t for t in day_tasks if t.get("is_done")]
+        focus = [t for t in day_tasks if t.get("is_focus")]
+        others = [t for t in day_tasks if not t.get("is_focus")]
+        task_msg = state.pop("task_msg", "")
         task_items = []
         if day_tasks:
             frac = len(done) / len(day_tasks)
@@ -951,6 +1027,8 @@ def main(page: ft.Page):
                                      bgcolor=T["accent"], border_radius=4)))
             if len(done) == len(day_tasks):
                 hint = tr("Усе зроблено, чудовий день 💙")
+            elif focus and all(t.get("is_done") for t in focus):
+                hint = tr("Головне зроблено, решта це бонус 🌿")
             elif not done:
                 hint = tr("Іноді день це просто відпочинок 🌿")
             else:
@@ -959,9 +1037,12 @@ def main(page: ft.Page):
         else:
             task_items.append(ft.Text(tr("Поки нічого не заплановано. Спокійний день 🌿"),
                                       size=13, color=T["text_soft"]))
+        if task_msg:
+            task_items.append(ft.Text(task_msg, size=12, color="#B45309"))
 
-        for t in day_tasks:
+        def task_row(t, highlight=False):
             is_done = t.get("is_done")
+            is_focus = t.get("is_focus")
             color = PRIORITIES.get(t.get("priority"), PRIORITIES["green"])[0]
             check = ft.Container(
                 content=ft.Column([ft.Text("✓" if is_done else "", size=13, color=T["on_accent"])],
@@ -972,18 +1053,37 @@ def main(page: ft.Page):
                 bgcolor=T["accent"] if is_done else T["column"],
                 on_click=lambda e, t=t: toggle_task(t),
             )
-            task_items.append(ft.Container(
-                content=ft.Row(
-                    [check,
-                     ft.Text("●", color=color, size=14),
+            star = ft.Container(
+                content=ft.Text("★" if is_focus else "☆", size=20,
+                                color=T["accent"] if is_focus else T["text_muted"]),
+                padding=ft.Padding(left=6, top=0, right=2, bottom=0),
+                on_click=lambda e, t=t: toggle_focus(t),
+            )
+            cells = [check, ft.Text("●", color=color, size=14),
                      ft.Text(t["title"], size=15, weight="bold", expand=True,
-                             color=T["text_muted"] if is_done else T["text"])],
-                    spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                             color=T["text_muted"] if is_done else T["text"])]
+            if t.get("recurrence"):
+                cells.append(ft.Text("↻", size=14, color=T["text_muted"]))
+            cells.append(star)
+            return ft.Container(
+                content=ft.Row(cells, spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 padding=ft.Padding(left=10, top=8, right=10, bottom=8),
                 border_radius=14,
-                bgcolor=T["surface_alt"],
+                bgcolor=T["column"] if highlight else T["surface_alt"],
                 on_click=lambda e, t=t: open_task_dialog(t["column_id"], t),
-            ))
+            )
+
+        if focus:
+            task_items.append(small_label(tr("Головне на день")))
+            task_items += [task_row(t, highlight=True) for t in focus]
+        if others:
+            if focus:
+                task_items.append(small_label(tr("Решта")))
+            task_items += [task_row(t) for t in others]
+        if day_tasks and not focus:
+            task_items.append(ft.Text(
+                tr("Познач ★ до трьох справ, які справді важливі. Решта за можливості."),
+                size=12, color=T["text_muted"]))
 
         task_items.append(ft.TextButton(
             tr("+ Додати завдання"),
@@ -995,7 +1095,17 @@ def main(page: ft.Page):
 
         body = ft.Row([left, right], wrap=True, spacing=20, run_spacing=20,
                       vertical_alignment=ft.CrossAxisAlignment.START)
-        return [ft.Text(tr("Мій день"), size=26, weight="bold"), nav, body]
+        try:
+            last = calendar.monthrange(d.year, d.month)[1]
+            rows = requests.get(f"{API}/days", params={
+                "start": d.replace(day=1).isoformat(),
+                "end": d.replace(day=last).isoformat()}).json()
+            filled, total = fill_stats(rows, d.year, d.month)
+            fill_card = month_fill_card(filled, total, MONTHS[d.month - 1],
+                                        on_click=lambda e: go("diary"))
+        except Exception:
+            fill_card = ft.Container()
+        return [ft.Text(tr("Мій день"), size=26, weight="bold"), nav, fill_card, body]
 
     # ---------- друк місяця ----------
     def open_print_dialog():
@@ -1289,6 +1399,9 @@ def main(page: ft.Page):
         if mode == "summary":
             parts.append(ft.Text(tr("Натисни на день, щоб додати фото, настрій і записку 🌸"),
                                  size=12, color=T["text_soft"]))
+        if mode == "summary":
+            filled, total = fill_stats(list(memories.values()), y, m)
+            parts.append(month_fill_card(filled, total, MONTHS[m - 1]))
         parts += [weekdays, grid]
         return parts
 

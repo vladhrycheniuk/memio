@@ -126,6 +126,28 @@ EN = {
     "Завтра": "Tomorrow",
     "Через тиждень": "In a week",
     "Без дати": "No date",
+    # повтори, «головне», «заповнений місяць»
+    "Повтор": "Repeat",
+    "Не повторювати": "Don't repeat",
+    "Щодня": "Daily",
+    "По буднях": "Weekdays",
+    "Щотижня": "Weekly",
+    "Щомісяця": "Monthly",
+    "★ Головне на день": "★ Top pick of the day",
+    "Головне на день": "Top picks of the day",
+    "Решта": "The rest",
+    "Познач ★ до трьох справ, які справді важливі. Решта за можливості.":
+        "Mark up to three tasks with ★ that truly matter. The rest is optional.",
+    "Головних справ може бути не більше трьох.": "You can have at most three top picks per day.",
+    "Не вдалося зберегти завдання.": "Could not save the task.",
+    "Головне зроблено, решта це бонус 🌿": "The main things are done, the rest is a bonus 🌿",
+    "Заповнено {filled} з {total} днів": "Filled {filled} of {total} days",
+    "Кожен день це маленька історія. Почни з сьогоднішнього 🌱":
+        "Every day is a small story. Start with today 🌱",
+    "Дні можна дописувати пізніше, нічого не згорає 🌿":
+        "You can fill in days later, nothing expires 🌿",
+    "Місяць заповнено! Можна друкувати календар 🌸":
+        "The month is full! Time to print the calendar 🌸",
     # друк
     "🖨 Друк місяця": "🖨 Print month",
     "Друк · {month} {year}": "Print · {month} {year}",
@@ -261,6 +283,28 @@ SV = {
     "Усе зроблено, чудовий день 💙": "Allt klart, en underbar dag 💙",
     "Іноді день це просто відпочинок 🌿": "Ibland är en dag bara vila 🌿",
     "Решту можна спокійно перенести 🌿": "Resten kan lugnt flyttas 🌿",
+    # повтори, «головне», «заповнений місяць»
+    "Повтор": "Upprepning",
+    "Не повторювати": "Upprepa inte",
+    "Щодня": "Dagligen",
+    "По буднях": "Vardagar",
+    "Щотижня": "Varje vecka",
+    "Щомісяця": "Varje månad",
+    "★ Головне на день": "★ Dagens viktigaste",
+    "Головне на день": "Dagens viktigaste",
+    "Решта": "Resten",
+    "Познач ★ до трьох справ, які справді важливі. Решта за можливості.":
+        "Markera upp till tre uppgifter med ★ som verkligen är viktiga. Resten gör du i mån av tid.",
+    "Головних справ може бути не більше трьох.": "Du kan ha högst tre viktigaste uppgifter per dag.",
+    "Не вдалося зберегти завдання.": "Kunde inte spara uppgiften.",
+    "Головне зроблено, решта це бонус 🌿": "Det viktigaste är klart, resten är en bonus 🌿",
+    "Заповнено {filled} з {total} днів": "Ifyllt {filled} av {total} dagar",
+    "Кожен день це маленька історія. Почни з сьогоднішнього 🌱":
+        "Varje dag är en liten berättelse. Börja med idag 🌱",
+    "Дні можна дописувати пізніше, нічого не згорає 🌿":
+        "Du kan fylla i dagar senare, inget försvinner 🌿",
+    "Місяць заповнено! Можна друкувати календар 🌸":
+        "Månaden är full! Dags att skriva ut kalendern 🌸",
     # друк
     "🖨 Друк місяця": "🖨 Skriv ut månaden",
     "Друк · {month} {year}": "Utskrift · {month} {year}",

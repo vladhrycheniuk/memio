@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Priority = Literal["red", "yellow", "green"]
+Recurrence = Literal["daily", "weekdays", "weekly", "monthly"]
 
 
 class TopicCreate(BaseModel):
@@ -23,6 +24,8 @@ class TaskCreate(BaseModel):
     topic_id: int | None = None
     priority: Priority = "green"
     due_date: date | None = None
+    recurrence: Recurrence | None = None
+    is_focus: bool = False
 
 
 class TaskUpdate(BaseModel):
@@ -31,6 +34,8 @@ class TaskUpdate(BaseModel):
     topic_id: int | None = None
     priority: Priority | None = None
     due_date: date | None = None
+    recurrence: Recurrence | None = None
+    is_focus: bool | None = None
 
 
 class TaskMove(BaseModel):
@@ -51,6 +56,8 @@ class TaskOut(BaseModel):
     position: int
     is_done: bool
     due_date: date | None
+    recurrence: str | None = None
+    is_focus: bool | None = False
 
 
 class ColumnOut(BaseModel):

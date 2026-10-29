@@ -58,6 +58,13 @@ class Task(Base):
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # повтор: daily / weekdays / weekly / monthly (або NULL)
+    recurrence = Column(String(10), nullable=True)
+    # «головне на день»: не більше трьох на одну дату
+    is_focus = Column(Boolean, default=False)
+    # чи вже створено наступний повтор (щоб не дублювати)
+    spawned = Column(Boolean, default=False)
+
     user = relationship("User", back_populates="tasks")
     column = relationship("KanbanColumn", back_populates="tasks")
     topic = relationship("Topic")

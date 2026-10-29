@@ -1,10 +1,35 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import inspect, text
 from .database import Base, engine, SessionLocal
 from . import models
 from .routers import tasks, days, export
 
 Base.metadata.create_all(bind=engine)
+
+# нові колонки, яких не було у старих базах (проста міграція, дані не втрачаються)
+NEW_COLUMNS = {
+    "tasks": [
+        ("recurrence", "VARCHAR(10)"),
+        ("is_focus", "BOOLEAN DEFAULT {false}"),
+        ("spawned", "BOOLEAN DEFAULT {false}"),
+    ],
+}
+
+
+def ensure_columns():
+    inspector = inspect(engine)
+    false = "0" if engine.dialect.name == "sqlite" else "FALSE"
+    with engine.begin() as conn:
+        for table, columns in NEW_COLUMNS.items():
+            existing = {col["name"] for col in inspector.get_columns(table)}
+            for name, ddl in columns:
+                if name not in existing:
+                    conn.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN {name} {ddl.format(false=false)}"))
+
+
+ensure_columns()
 
 
 def seed():
