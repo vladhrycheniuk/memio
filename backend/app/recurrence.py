@@ -1,36 +1,44 @@
-"""Логіка повторюваних завдань (без залежностей, тому легко тестується)."""
+"""Повторювані завдання: дати всієї серії наперед (без залежностей, легко тестується)."""
 import calendar
 from datetime import date, timedelta
 
 RULES = ("daily", "weekdays", "weekly", "monthly")
+MAX_OCCURRENCES = 400  # запобіжник, щоб одна серія не роздула базу
 
 
-def advance(d: date, rule: str) -> date:
-    """Наступна дата за правилом, починаючи з d."""
-    if rule == "daily":
-        return d + timedelta(days=1)
-    if rule == "weekly":
-        return d + timedelta(days=7)
-    if rule == "weekdays":
-        nxt = d + timedelta(days=1)
-        while nxt.weekday() >= 5:  # субота, неділя
-            nxt += timedelta(days=1)
-        return nxt
-    if rule == "monthly":
-        year = d.year + d.month // 12
-        month = d.month % 12 + 1
-        return date(year, month, min(d.day, calendar.monthrange(year, month)[1]))
-    raise ValueError(f"unknown rule: {rule}")
+def add_months(d: date, n: int) -> date:
+    """Дата через n місяців; якщо дня немає в місяці, береться останній (31 січня -> 28 лютого)."""
+    year = d.year + (d.month - 1 + n) // 12
+    month = (d.month - 1 + n) % 12 + 1
+    return date(year, month, min(d.day, calendar.monthrange(year, month)[1]))
 
 
-def next_occurrence(base: date, rule: str | None, today: date) -> date | None:
+def occurrences(start: date, rule: str, until: date) -> list[date]:
     """
-    Дата наступного повтору після виконання завдання.
-    Завжди строго після сьогодні, тож пропущені дні не накопичуються.
+    Усі дати серії від start до until включно (перша дата це сам start).
+    Для невідомого правила або until раніше за start повертається лише start.
     """
+    dates = [start]
     if rule not in RULES:
-        return None
-    nxt = advance(base, rule)
-    while nxt <= today:
-        nxt = advance(nxt, rule)
-    return nxt
+        return dates
+
+    k = 0
+    current = start
+    while len(dates) < MAX_OCCURRENCES:
+        if rule == "weekdays":
+            current += timedelta(days=1)
+            while current.weekday() >= 5:  # субота, неділя
+                current += timedelta(days=1)
+            nxt = current
+        else:
+            k += 1
+            if rule == "daily":
+                nxt = start + timedelta(days=k)
+            elif rule == "weekly":
+                nxt = start + timedelta(days=7 * k)
+            else:  # monthly
+                nxt = add_months(start, k)
+        if nxt > until:
+            break
+        dates.append(nxt)
+    return dates

@@ -25,6 +25,7 @@ class TaskCreate(BaseModel):
     priority: Priority = "green"
     due_date: date | None = None
     recurrence: Recurrence | None = None
+    repeat_until: date | None = None
     is_focus: bool = False
 
 
@@ -35,6 +36,7 @@ class TaskUpdate(BaseModel):
     priority: Priority | None = None
     due_date: date | None = None
     recurrence: Recurrence | None = None
+    repeat_until: date | None = None
     is_focus: bool | None = None
 
 
@@ -57,6 +59,7 @@ class TaskOut(BaseModel):
     is_done: bool
     due_date: date | None
     recurrence: str | None = None
+    series_id: str | None = None
     is_focus: bool | None = False
 
 

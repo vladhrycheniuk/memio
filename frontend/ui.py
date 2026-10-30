@@ -36,6 +36,8 @@ WEEKDAYS_FULL = ["Понеділок", "Вівторок", "Середа", "Че
 REPEATS = [(None, "Не повторювати"), ("daily", "Щодня"), ("weekdays", "По буднях"),
            ("weekly", "Щотижня"), ("monthly", "Щомісяця")]
 REPEAT_LABELS = {key: label for key, label in REPEATS if key}
+UNTILS = [("month", "Кінця місяця"), ("year", "Кінця року"), ("next_year", "Кінця наступного року")]
+SCOPES = [("this", "Лише це завдання"), ("future", "Це й наступні"), ("all", "Усі в серії")]
 
 PERIODS = [("day", "День"), ("week", "Тиждень"), ("month", "Місяць"),
            ("year", "Рік"), ("all", "Усі")]
@@ -332,7 +334,8 @@ def main(page: ft.Page):
     def overdue_tasks():
         t = datetime.date.today().isoformat()
         return [x for x in all_tasks()
-                if not x.get("is_done") and x.get("due_date") and x["due_date"] < t]
+                if not x.get("is_done") and x.get("due_date") and x["due_date"] < t
+                and not x.get("series_id")]
 
     def carry_over(e):
         iso = datetime.date.today().isoformat()
@@ -436,7 +439,10 @@ def main(page: ft.Page):
             "due": datetime.date.fromisoformat(due_src) if due_src else None,
             "recurrence": (task or {}).get("recurrence"),
             "is_focus": bool((task or {}).get("is_focus")),
+            "until": "year",
+            "scope": "this",
         }
+        is_series = bool((task or {}).get("series_id"))
 
         title = make_field(label=tr("Назва"), value=task["title"] if task else "", autofocus=True)
         desc = make_field(label=tr("Опис (необовʼязково)"),
@@ -449,8 +455,36 @@ def main(page: ft.Page):
         prio_row = ft.Row(spacing=8, wrap=True)
         topic_row = ft.Row(spacing=6, wrap=True)
         repeat_row = ft.Row(spacing=6, wrap=True)
+        until_row = ft.Row(spacing=6, wrap=True)
+        until_info = ft.Text("", size=12, color=T["text_muted"])
+        scope_row = ft.Row(spacing=6, wrap=True)
         focus_row = ft.Row(spacing=6)
         form_msg = ft.Text("", size=12, color="#B45309")
+
+        repeat_block = ft.Column([small_label(tr("Повтор")), repeat_row], spacing=6)
+        until_block = ft.Column([small_label(tr("Повторювати до")), until_row, until_info],
+                                spacing=6)
+        series_block = ft.Column([
+            small_label(tr("Частина серії повторів")),
+            ft.Text("↻ " + tr(REPEAT_LABELS.get((task or {}).get("recurrence"), "")),
+                    size=14, color=T["text"]),
+            small_label(tr("Застосувати до")), scope_row], spacing=6)
+
+        def until_date():
+            base = st["due"] or datetime.date.today()
+            if st["until"] == "month":
+                return base.replace(day=calendar.monthrange(base.year, base.month)[1])
+            if st["until"] == "next_year":
+                return datetime.date(base.year + 1, 12, 31)
+            return datetime.date(base.year, 12, 31)
+
+        def set_until(key):
+            st["until"] = key
+            refresh()
+
+        def set_scope(key):
+            st["scope"] = key
+            refresh()
 
         def set_repeat(value):
             st["recurrence"] = value
@@ -490,6 +524,21 @@ def main(page: ft.Page):
             repeat_row.controls = [
                 chip(tr(label), st["recurrence"] == value, lambda e, v=value: set_repeat(v))
                 for value, label in REPEATS
+            ]
+            show_until = bool(st["recurrence"]) and not is_series
+            repeat_block.visible = not is_series
+            until_block.visible = show_until
+            series_block.visible = is_series
+            until_row.controls = [
+                chip(tr(label), st["until"] == key, lambda e, k=key: set_until(k))
+                for key, label in UNTILS
+            ]
+            end = until_date()
+            until_info.value = tr("Повторюватиметься до {date}").format(
+                date=f"{end.day} {MONTHS_GEN[end.month - 1]} {end.year}")
+            scope_row.controls = [
+                chip(tr(label), st["scope"] == key, lambda e, k=key: set_scope(k))
+                for key, label in SCOPES
             ]
             focus_row.controls = [
                 chip(tr("★ Головне на день"), st["is_focus"], lambda e: toggle_focus_flag())
@@ -542,11 +591,15 @@ def main(page: ft.Page):
                 "due_date": st["due"].isoformat() if st["due"] else None,
                 "topic_id": topic_id,
                 "priority": st["priority"],
-                "recurrence": st["recurrence"],
                 "is_focus": st["is_focus"],
             }
+            if not is_series:
+                payload["recurrence"] = st["recurrence"]
+                if st["recurrence"]:
+                    payload["repeat_until"] = until_date().isoformat()
             if task:
-                r = requests.patch(f"{API}/tasks/{task['id']}", json=payload)
+                r = requests.patch(f"{API}/tasks/{task['id']}",
+                                   params={"scope": st["scope"]}, json=payload)
             else:
                 payload["column_id"] = column_id
                 r = requests.post(f"{API}/tasks", json=payload)
@@ -559,7 +612,8 @@ def main(page: ft.Page):
 
         def remove(e):
             close_dialog(dlg)
-            delete(task["id"])
+            requests.delete(f"{API}/tasks/{task['id']}", params={"scope": st["scope"]})
+            load()
             if on_done:
                 on_done()
 
@@ -580,9 +634,9 @@ def main(page: ft.Page):
                 [title, desc,
                  small_label(tr("Дата")), quick_row, date_row,
                  small_label(tr("Пріоритет")), prio_row,
-                 small_label(tr("Повтор")), repeat_row, focus_row,
                  small_label(tr("Тема")), topic_row, new_topic,
-                 form_msg],
+                 repeat_block, until_block, series_block,
+                 focus_row, form_msg],
                 tight=True, width=440, scroll="auto", spacing=10,
             ),
             actions=actions,

@@ -60,10 +60,10 @@ class Task(Base):
 
     # повтор: daily / weekdays / weekly / monthly (або NULL)
     recurrence = Column(String(10), nullable=True)
+    # усі завдання однієї серії повторів мають спільний series_id
+    series_id = Column(String(36), nullable=True, index=True)
     # «головне на день»: не більше трьох на одну дату
     is_focus = Column(Boolean, default=False)
-    # чи вже створено наступний повтор (щоб не дублювати)
-    spawned = Column(Boolean, default=False)
 
     user = relationship("User", back_populates="tasks")
     column = relationship("KanbanColumn", back_populates="tasks")

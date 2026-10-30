@@ -11,8 +11,8 @@ Base.metadata.create_all(bind=engine)
 NEW_COLUMNS = {
     "tasks": [
         ("recurrence", "VARCHAR(10)"),
+        ("series_id", "VARCHAR(36)"),
         ("is_focus", "BOOLEAN DEFAULT {false}"),
-        ("spawned", "BOOLEAN DEFAULT {false}"),
     ],
 }
 

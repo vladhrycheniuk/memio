@@ -1,35 +1,43 @@
 from datetime import date
 
-from app.recurrence import next_occurrence
+from app.recurrence import MAX_OCCURRENCES, occurrences
 
 
-def test_daily_done_on_the_day():
-    assert next_occurrence(date(2026, 10, 29), "daily", date(2026, 10, 29)) == date(2026, 10, 30)
+def test_weekly_until_end_of_year():
+    dates = occurrences(date(2026, 10, 29), "weekly", date(2026, 12, 31))
+    assert dates[0] == date(2026, 10, 29)
+    assert dates[1] == date(2026, 11, 5)
+    assert dates[-1] == date(2026, 12, 31)
+    assert len(dates) == 10
 
 
-def test_daily_done_late_skips_missed_days():
-    # завдання було на понеділок, зроблено в середу: наступне вже після середи
-    assert next_occurrence(date(2026, 10, 26), "daily", date(2026, 10, 28)) == date(2026, 10, 29)
+def test_daily_range_is_inclusive():
+    dates = occurrences(date(2026, 10, 29), "daily", date(2026, 11, 1))
+    assert dates == [date(2026, 10, 29), date(2026, 10, 30), date(2026, 10, 31), date(2026, 11, 1)]
 
 
-def test_weekly_done_early_keeps_schedule():
-    # на понеділок 2 листопада, зроблено завчасно в середу 28 жовтня
-    assert next_occurrence(date(2026, 11, 2), "weekly", date(2026, 10, 28)) == date(2026, 11, 9)
+def test_weekdays_skip_weekends():
+    dates = occurrences(date(2026, 10, 30), "weekdays", date(2026, 11, 4))  # п'ятниця
+    assert dates == [date(2026, 10, 30), date(2026, 11, 2), date(2026, 11, 3), date(2026, 11, 4)]
 
 
-def test_weekdays_skip_weekend():
-    friday = date(2026, 10, 30)
-    assert next_occurrence(friday, "weekdays", friday) == date(2026, 11, 2)  # понеділок
+def test_monthly_keeps_original_day_after_short_month():
+    dates = occurrences(date(2026, 1, 31), "monthly", date(2026, 4, 30))
+    assert dates == [date(2026, 1, 31), date(2026, 2, 28), date(2026, 3, 31), date(2026, 4, 30)]
 
 
-def test_monthly_clamps_short_months():
-    assert next_occurrence(date(2026, 1, 31), "monthly", date(2026, 1, 31)) == date(2026, 2, 28)
+def test_monthly_crosses_year_boundary():
+    dates = occurrences(date(2026, 11, 15), "monthly", date(2027, 2, 15))
+    assert dates == [date(2026, 11, 15), date(2026, 12, 15), date(2027, 1, 15), date(2027, 2, 15)]
 
 
-def test_monthly_crosses_year():
-    assert next_occurrence(date(2026, 12, 15), "monthly", date(2026, 12, 15)) == date(2027, 1, 15)
+def test_until_before_start_gives_single_date():
+    assert occurrences(date(2026, 10, 29), "weekly", date(2026, 10, 1)) == [date(2026, 10, 29)]
 
 
-def test_unknown_or_missing_rule():
-    assert next_occurrence(date(2026, 10, 29), None, date(2026, 10, 29)) is None
-    assert next_occurrence(date(2026, 10, 29), "yearly", date(2026, 10, 29)) is None
+def test_unknown_rule_gives_single_date():
+    assert occurrences(date(2026, 10, 29), "yearly", date(2030, 1, 1)) == [date(2026, 10, 29)]
+
+
+def test_series_is_capped():
+    assert len(occurrences(date(2026, 1, 1), "daily", date(2040, 1, 1))) == MAX_OCCURRENCES
