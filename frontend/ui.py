@@ -277,6 +277,8 @@ def main(page: ft.Page):
         "day": today,
         "day_msg": "",
         "note_ctrl": None,
+        "expanded": set(),
+        "group_series": True,
     }
 
     content_area = ft.Column(expand=True, scroll="auto", spacing=15)
@@ -713,9 +715,73 @@ def main(page: ft.Page):
                 src = None
         return getattr(src, "data", None)
 
+    def toggle_group(key):
+        if key in state["expanded"]:
+            state["expanded"].discard(key)
+        else:
+            state["expanded"].add(key)
+        render()
+
+    def toggle_grouping(e):
+        state["group_series"] = not state["group_series"]
+        render()
+
+    def build_group(col, sid, rows, idx, columns):
+        """Одна картка на всю серію повторів; клік розгортає окремі завдання."""
+        key = f"{col['id']}:{sid}"
+        expanded = key in state["expanded"]
+        rows = sorted(rows, key=lambda t: t.get("due_date") or "")
+        first = rows[0]
+        color = PRIORITIES.get(first.get("priority"), PRIORITIES["green"])[0]
+        pending = [t for t in rows if not t.get("is_done")]
+        meta = (f"↻ {tr(REPEAT_LABELS.get(first.get('recurrence'), ''))} · ×{len(rows)}")
+
+        lines = [
+            ft.Row([ft.Text("●", color=color, size=16),
+                    ft.Text(first["title"], size=15, weight="bold", color=T["text"], expand=True),
+                    ft.Text("▾" if expanded else "▸", size=16, color=T["text_muted"])],
+                   spacing=6),
+            ft.Text(meta, size=12, color=T["text_muted"]),
+        ]
+        if pending and pending[0].get("due_date"):
+            nearest = datetime.date.fromisoformat(pending[0]["due_date"])
+            lines.append(ft.Text(tr("Найближче: {date}").format(date=fmt_date(nearest)),
+                                 size=12, color=T["text_soft"]))
+        header = ft.Container(
+            content=ft.Column(lines, spacing=3),
+            bgcolor=T["surface"], padding=10, border_radius=12,
+            on_click=lambda e, k=key: toggle_group(k),
+        )
+        items = [header]
+        if expanded:
+            items += [ft.Container(content=build_card(t, idx, columns),
+                                   padding=ft.Padding(left=14, top=0, right=0, bottom=0))
+                      for t in rows]
+        return ft.Column(items, spacing=6)
+
+    def build_cards(visible, col, idx, columns):
+        # у режимі «День» кожне завдання окремо; в ширших періодах серії згортаються
+        grouping = state["group_series"] and state["period"] != "day"
+        groups = {}
+        if grouping:
+            for t in visible:
+                if t.get("series_id"):
+                    groups.setdefault(t["series_id"], []).append(t)
+        cards, seen = [], set()
+        for t in visible:
+            sid = t.get("series_id")
+            if grouping and sid and len(groups.get(sid, [])) > 1:
+                if sid in seen:
+                    continue
+                seen.add(sid)
+                cards.append(build_group(col, sid, groups[sid], idx, columns))
+            else:
+                cards.append(build_card(t, idx, columns))
+        return cards
+
     def build_column(col, idx, columns):
         visible = [t for t in col["tasks"] if matches(t)]
-        cards = [build_card(t, idx, columns) for t in visible]
+        cards = build_cards(visible, col, idx, columns)
         add_btn = ft.TextButton(
             tr("+ Додати завдання"),
             on_click=lambda e, c=col["id"]: open_task_dialog(c, default_due=default_due_for_period()),
@@ -785,6 +851,9 @@ def main(page: ft.Page):
             if t["id"] in used:
                 topic_chips.append(chip(f"#{tr(t['name'])}", state["topic_filter"] == t["id"],
                                         lambda e, tid=t["id"]: set_topic_filter(tid)))
+        if state["period"] != "day":
+            topic_chips.append(chip("↻ " + tr("Групувати повтори"),
+                                    state["group_series"], toggle_grouping))
         topic_row = ft.Row(topic_chips, spacing=8, wrap=True)
 
         total = sum(1 for t in all_tasks() if matches(t))
